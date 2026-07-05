@@ -2,6 +2,7 @@
 // 所有动态游戏状态存 localStorage，后端只提供只读配置
 
 const LS_KEY = 'ghost_companion_state'
+const LS_SCHEDULE_HISTORY_KEY = 'ghost_schedule_history'
 
 export interface CompanionState {
   deviceId: string
@@ -29,6 +30,22 @@ export interface ScheduleItem {
   location: string
   thought: string
   done?: boolean
+  completedAt?: number
+}
+
+// 日程历史记录（按日期存储）
+export interface ScheduleDay {
+  date: string
+  items: ScheduleItem[]
+  summary: string
+  generatedAt: number
+}
+
+export interface ScheduleHistory {
+  characterId: string
+  days: Record<string, ScheduleDay>
+  currentSummary: string
+  totalInteractCount: number
 }
 
 export interface Letter {
@@ -61,12 +78,44 @@ export interface Attachment {
   createdAt: string
 }
 
+// ==================== 工具函数 ====================
+
 function generateId(): string {
   return Math.random().toString(36).substring(2, 9)
 }
 
 function getNow(): number {
   return Date.now()
+}
+
+function getToday(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function getCurrentTime(): string {
+  const now = new Date()
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+}
+
+// 时间比较：返回 -1 (t1 < t2), 0 (相等), 1 (t1 > t2)
+function compareTime(t1: string, t2: string): number {
+  const [h1, m1] = t1.split(':').map(Number)
+  const [h2, m2] = t2.split(':').map(Number)
+  if (h1 !== h2) return h1 < h2 ? -1 : 1
+  if (m1 !== m2) return m1 < m2 ? -1 : 1
+  return 0
+}
+
+// 判断日程状态
+export type ScheduleStatus = 'past' | 'current' | 'future' | 'done'
+
+export function getScheduleStatus(item: ScheduleItem, currentTime?: string): ScheduleStatus {
+  if (item.done) return 'done'
+  const now = currentTime || getCurrentTime()
+  const cmp = compareTime(item.time, now)
+  if (cmp < 0) return 'past'
+  if (cmp === 0) return 'current'
+  return 'future'
 }
 
 // 时间衰减：根据上次互动时间计算当前哈气值
@@ -146,11 +195,7 @@ export const companionLocal = {
         position: { x: 50, y: 60 },
         interactCount: 0,
         lastInteractAt: getNow(),
-        schedule: [
-          { time: '08:00', activity: '在窗台发呆', location: '窗台', thought: '太阳照在身上真舒服' },
-          { time: '10:00', activity: '观察窗外风景', location: '窗台前', thought: '那些蝴蝶真好看' },
-          { time: '14:00', activity: '在沙发上散步', location: '地毯上', thought: '地毯的触感很温暖' },
-        ],
+        schedule: [],
       }
       this.saveState(state)
     }
@@ -177,6 +222,12 @@ export const companionLocal = {
 
     state.characters[characterId] = charState
     this.saveState(state)
+
+    // 同时更新日程历史的互动计数
+    const history = this.getScheduleHistory(characterId)
+    history.totalInteractCount += 1
+    this.saveScheduleHistory(characterId, history)
+
     return charState
   },
 
@@ -189,7 +240,95 @@ export const companionLocal = {
     return charState
   },
 
-  // ==================== 日程 ====================
+  // ==================== 日程历史（长记忆）====================
+
+  getScheduleHistory(characterId: string): ScheduleHistory {
+    if (typeof window === 'undefined') {
+      return { characterId, days: {}, currentSummary: '', totalInteractCount: 0 }
+    }
+    const raw = localStorage.getItem(`${LS_SCHEDULE_HISTORY_KEY}_${characterId}`)
+    if (!raw) {
+      return { characterId, days: {}, currentSummary: '', totalInteractCount: 0 }
+    }
+    try {
+      return JSON.parse(raw) as ScheduleHistory
+    } catch {
+      return { characterId, days: {}, currentSummary: '', totalInteractCount: 0 }
+    }
+  },
+
+  saveScheduleHistory(characterId: string, history: ScheduleHistory): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(`${LS_SCHEDULE_HISTORY_KEY}_${characterId}`, JSON.stringify(history))
+  },
+
+  // 获取今天的日程
+  getTodaySchedule(characterId: string): ScheduleItem[] {
+    const history = this.getScheduleHistory(characterId)
+    const today = getToday()
+    const todayRecord = history.days[today]
+    if (todayRecord) {
+      return todayRecord.items
+    }
+    // 如果没有今天的日程，返回角色状态中的日程（兼容旧数据）
+    const charState = this.getCharacterState(characterId)
+    return charState.schedule || []
+  },
+
+  // 保存今天的日程
+  saveTodaySchedule(characterId: string, items: ScheduleItem[], summary: string): void {
+    const history = this.getScheduleHistory(characterId)
+    const today = getToday()
+    history.days[today] = {
+      date: today,
+      items,
+      summary,
+      generatedAt: getNow(),
+    }
+    history.currentSummary = summary
+    this.saveScheduleHistory(characterId, history)
+
+    // 同时更新角色状态中的日程（兼容旧逻辑）
+    const state = this.getState()
+    const charState = this.getCharacterState(characterId)
+    charState.schedule = items
+    state.characters[characterId] = charState
+    this.saveState(state)
+  },
+
+  // 获取昨天的日程和完成情况（用于 AI Prompt）
+  getYesterdaySchedule(characterId: string): ScheduleDay | null {
+    const history = this.getScheduleHistory(characterId)
+    const dates = Object.keys(history.days).sort().reverse()
+    if (dates.length >= 2) {
+      return history.days[dates[1]]
+    }
+    return null
+  },
+
+  // 获取上次日程（最近一天）
+  getLastSchedule(characterId: string): ScheduleDay | null {
+    const history = this.getScheduleHistory(characterId)
+    const dates = Object.keys(history.days).sort().reverse()
+    if (dates.length > 0) {
+      return history.days[dates[0]]
+    }
+    return null
+  },
+
+  // 计算日程完成率
+  getScheduleCompletionRate(characterId: string): number {
+    const history = this.getScheduleHistory(characterId)
+    let total = 0
+    let done = 0
+    Object.values(history.days).forEach((day) => {
+      total += day.items.length
+      done += day.items.filter((i) => i.done).length
+    })
+    return total > 0 ? Math.round((done / total) * 100) : 0
+  },
+
+  // ==================== 日程交互 ====================
 
   toggleScheduleDone(characterId: string, time: string): ScheduleItem[] {
     const state = this.getState()
@@ -197,8 +336,25 @@ export const companionLocal = {
     const item = charState.schedule.find((s) => s.time === time)
     if (item) {
       item.done = !item.done
+      if (item.done) {
+        item.completedAt = getNow()
+      } else {
+        delete item.completedAt
+      }
       state.characters[characterId] = charState
       this.saveState(state)
+
+      // 同步更新历史记录
+      const history = this.getScheduleHistory(characterId)
+      const today = getToday()
+      if (history.days[today]) {
+        const historyItem = history.days[today].items.find((i) => i.time === time)
+        if (historyItem) {
+          historyItem.done = item.done
+          historyItem.completedAt = item.completedAt
+          this.saveScheduleHistory(characterId, history)
+        }
+      }
     }
     return charState.schedule
   },
@@ -286,6 +442,13 @@ export const companionLocal = {
   reset(): void {
     if (typeof window === 'undefined') return
     localStorage.removeItem(LS_KEY)
+    // 清除所有角色的日程历史
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(LS_SCHEDULE_HISTORY_KEY)) {
+        localStorage.removeItem(key)
+      }
+    }
   },
 }
 
