@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Heart } from 'lucide-react'
 import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, type Character } from '@/lib/companion-data'
+import { companionApi } from '@/lib/companion-api'
 import { SpeechBubble } from './speech-bubble'
 import { ThoughtBubble } from './thought-bubble'
 import { MemoriesPanel } from './memories-panel'
@@ -135,6 +136,16 @@ export function CozyRoom() {
   isMovingRef.current = isMoving
   catPosRef.current = catPos
 
+  // 从后端加载角色数据
+  useEffect(() => {
+    companionApi.getCharacterStatus('maodie').then(data => {
+      if (data.userState) {
+        // 可以在这里同步状态
+        console.log('角色状态:', data.userState)
+      }
+    }).catch(() => { /* 后端未就绪时用本地数据 */ })
+  }, [])
+
   // 自动夜间模式
   useEffect(() => {
     const h = new Date().getHours()
@@ -202,6 +213,8 @@ export function CozyRoom() {
   // 点击猫 → 随机说话
   const petCat = useCallback(() => {
     if (isDragging || isMoving) return
+    // 记录互动到后端（静默，不阻塞）
+    companionApi.interact(currentCharacter.id, 'click').catch(() => {})
     const line = CAT_SAYINGS[Math.floor(Math.random() * CAT_SAYINGS.length)]
     setSpeech(line)
     setThought(null)
@@ -295,8 +308,13 @@ export function CozyRoom() {
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
-    if (isDragging) { setIsDragging(false); dragStartRef.current = null }
-  }, [isDragging])
+    if (isDragging) {
+      setIsDragging(false)
+      dragStartRef.current = null
+      // 同步位置到后端
+      companionApi.updatePosition(currentCharacter.id, catPos.x, catPos.y).catch(() => {})
+    }
+  }, [isDragging, currentCharacter.id, catPos.x, catPos.y])
 
   const showThought = !uiHidden && !!thought && !speech && !infoBarVisible && !isDragging
 
