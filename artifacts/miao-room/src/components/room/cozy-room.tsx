@@ -112,6 +112,8 @@ export function CozyRoom() {
   const [catPos, setCatPos] = useState({ x: 50, y: 62 })
   const [isMoving, setIsMoving] = useState(false)
   const [platform, setPlatform] = useState<typeof PLATFORMS[0] | null>(null)
+  const [catFacing, setCatFacing] = useState<'left' | 'right'>('right')
+  const [catAnim, setCatAnim] = useState<'idle' | 'walk' | 'jump'>('idle')
 
   // 拖动状态
   const [isDragging, setIsDragging] = useState(false)
@@ -125,10 +127,50 @@ export function CozyRoom() {
   const lastTouchTimeRef = useRef<number>(0)
   const touchCountRef = useRef<number>(0)
 
+  // 用 ref 同步可变状态，供自动行走 effect 读取
+  const isDraggingRef = useRef(false)
+  const isMovingRef = useRef(false)
+  const catPosRef = useRef(catPos)
+  isDraggingRef.current = isDragging
+  isMovingRef.current = isMoving
+  catPosRef.current = catPos
+
   // 自动夜间模式
   useEffect(() => {
     const h = new Date().getHours()
     setIsNight(h >= 18 || h < 6)
+  }, [])
+
+  // 角色自动行走 / 跳跃
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    function schedule() {
+      timer = setTimeout(act, 2600 + Math.random() * 3800)
+    }
+    function act() {
+      if (isDraggingRef.current || isMovingRef.current) { schedule(); return }
+      const rnd = Math.random()
+      if (rnd < 0.18) {
+        // 小跳
+        setCatAnim('jump')
+        setTimeout(() => setCatAnim('idle'), 720)
+      } else {
+        // 左右漫步
+        const goLeft = Math.random() < 0.5
+        const dist = 4 + Math.random() * 11
+        const cur = catPosRef.current
+        const newX = goLeft
+          ? Math.max(WALKABLE.xMin + 6, cur.x - dist)
+          : Math.min(WALKABLE.xMax - 8, cur.x + dist)
+        setCatFacing(goLeft ? 'left' : 'right')
+        setCatAnim('walk')
+        setCatPos(p => ({ ...p, x: newX }))
+        setTimeout(() => setCatAnim('idle'), 850)
+      }
+      schedule()
+    }
+    schedule()
+    return () => clearTimeout(timer)
   }, [])
 
   // 猫移动到新位置（点击地板）
@@ -136,6 +178,7 @@ export function CozyRoom() {
     const plat = getPlatform(x, y)
     setPlatform(plat)
     setIsMoving(true)
+    setCatFacing(catPosRef.current.x <= x ? 'right' : 'left')
     setCatPos({ x, y })
     setTimeout(() => setIsMoving(false), 550)
   }, [])
@@ -263,8 +306,8 @@ export function CozyRoom() {
   const catLift = platform ? platform.liftPct : 0
 
   return (
-    <div className={`relative flex min-h-[100dvh] items-center justify-center overflow-hidden p-3 ${isNight ? 'dark' : ''}`}>
-      <div className={`absolute inset-0 transition-colors duration-700 ${isNight ? 'bg-[#2a2420]' : 'bg-background'}`} />
+    <div className={`relative flex min-h-[100dvh] items-center justify-center overflow-hidden p-3 ${isNight ? 'night' : ''}`}>
+      <div className={`absolute inset-0 transition-colors duration-700 ${isNight ? 'bg-[#100a06]' : 'bg-background'}`} />
 
       {/* 眼睛：隐藏/显示 UI */}
       <button
@@ -332,24 +375,28 @@ export function CozyRoom() {
           uiHidden={uiHidden}
         />
 
-        {/* 地板上的信 (记忆) — 恢复像素图标，左上移一点 */}
-        <button
-          onClick={() => setPanel('memories')}
+        {/* 地板上的信 (记忆) — 像素图标，按钮与图标等大 */}
+        <div
+          className="absolute -translate-x-1/2 -translate-y-1/2"
           style={{ left: '40%', top: '77%' }}
-          className="group absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center focus:outline-none"
-          aria-label="记忆"
         >
-          <img
-            src="/room/letter.png"
-            alt="记忆"
-            style={{ width: '12%', minWidth: '52px' }}
-            className="pixelated drop-shadow-[0_4px_6px_rgba(90,60,40,0.25)] transition-transform group-hover:-translate-y-1 group-hover:scale-105"
-            draggable={false}
-          />
-          <span className={`ui-fade mt-1 rounded-full border-2 border-border bg-card/95 px-3 py-0.5 font-cute text-sm text-card-foreground shadow-md ${uiHidden ? 'ui-hidden' : ''}`}>
-            记忆
-          </span>
-        </button>
+          <button
+            onClick={() => setPanel('memories')}
+            className="group flex flex-col items-center focus:outline-none"
+            aria-label="记忆"
+          >
+            <img
+              src="/room/letter.png"
+              alt="记忆"
+              style={{ width: '52px', height: '52px' }}
+              className="pixelated object-contain drop-shadow-[0_4px_6px_rgba(90,60,40,0.25)] transition-transform group-hover:-translate-y-1 group-hover:scale-105"
+              draggable={false}
+            />
+            <span className={`ui-fade mt-1 rounded-full border-2 border-border bg-card/95 px-2 py-0.5 font-cute text-xs text-card-foreground shadow-md ${uiHidden ? 'ui-hidden' : ''}`}>
+              记忆
+            </span>
+          </button>
+        </div>
 
         {/* 右下角购物车 (物品) — 左上移一点 */}
         <RoomHotspot
@@ -389,9 +436,16 @@ export function CozyRoom() {
           <img
             src={currentCharacter.image}
             alt={currentCharacter.name}
-            style={{ width: '30%', minWidth: '130px' }}
+            style={{
+              width: '30%',
+              minWidth: '130px',
+              transform: `scaleX(${catFacing === 'left' ? -1 : 1})`,
+              transition: 'transform 0.15s ease',
+            }}
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${
-              isMoving ? 'animate-bounce' : isDragging ? 'scale-105' : 'animate-breathe'
+              isMoving || catAnim === 'walk' ? 'animate-bounce' :
+              catAnim === 'jump' ? 'animate-cat-jump' :
+              isDragging ? 'scale-105' : 'animate-breathe'
             }`}
             draggable={false}
           />
@@ -403,11 +457,11 @@ export function CozyRoom() {
           )}
         </button>
 
-        {/* 对话气泡 — 紧贴猫头部上方 */}
+        {/* 对话气泡 — 左下角尖角对准角色，气泡向右展开 */}
         {speech && !infoBarVisible && (
           <div
             className="pointer-events-none absolute -translate-y-full"
-            style={{ left: `${catPos.x}%`, top: `${catPos.y - 17}%`, zIndex: catZIndex + 1 }}
+            style={{ left: `${catPos.x - 2}%`, top: `${catPos.y - 15}%`, zIndex: catZIndex + 1 }}
           >
             <SpeechBubble text={speech} />
           </div>
