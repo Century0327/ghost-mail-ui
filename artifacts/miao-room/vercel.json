@@ -1,4 +1,7 @@
 {
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist/public",
   "rewrites": [
     { "source": "/api/companion/:path*", "destination": "https://random-ai-mail-ghost.vercel.app/api/companion/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
