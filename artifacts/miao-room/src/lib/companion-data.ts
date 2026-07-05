@@ -161,12 +161,12 @@ export type Character = {
 // 官方角色
 export const OFFICIAL_CHARACTERS: Character[] = [
   {
-    id: 'char-kitty',
-    name: '耄耋',
+    id: 'a7f3c9e2-1d8b-4e5a-9c6f-2b8d4e1a5c73',
+    name: 'kitty',
     image: '/room/cat.png',
-    bio: '一只温柔的橘猫，喜欢晒太阳和发呆。每天都会在家等你回来。',
-    personalities: ['p1', 'p8', 'p3'],
-    statName: '哈气值',
+    bio: '一只活泼可爱的三花猫，好奇心旺盛，喜欢探索房间的每个角落。永远元气满满！',
+    personalities: ['p2', 'p6', 'p8'],
+    statName: '元气值',
     statMax: 100,
     isOfficial: true,
     isPublic: true,
