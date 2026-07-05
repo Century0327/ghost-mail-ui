@@ -1,0 +1,1 @@
+- [Miao-room migration notes](miao-room-migration.md) — Next.js→Vite migration quirks: icon gaps, server-only imports, env var renaming.

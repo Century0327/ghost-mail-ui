@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "喵屋 · 我的治愈小房间"
+version = "1.0.0"
+id = "artifacts/miao-room"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24185
+
+[services.development]
+run = "pnpm --filter @workspace/miao-room run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/miao-room", "run", "build" ]
+publicDir = "artifacts/miao-room/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24185"
+BASE_PATH = "/"
