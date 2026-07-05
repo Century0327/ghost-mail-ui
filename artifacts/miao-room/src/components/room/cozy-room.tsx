@@ -8,11 +8,15 @@ import { ThoughtBubble } from './thought-bubble'
 import { MemoriesPanel } from './memories-panel'
 import { ShopPanel } from './shop-panel'
 import { SchedulePanel } from './schedule-panel'
+import { ScheduleGenerator } from './schedule-generator'
+import { SettingsMenu } from './settings-menu'
+import { ShopPanel } from './shop-panel'
+import { SchedulePanel } from './schedule-panel'
 import { SettingsMenu } from './settings-menu'
 import { AlbumPanel } from './album-panel'
 import { CharacterSelector } from './character-selector'
 
-type PanelKind = 'memories' | 'shop' | 'schedule' | 'album' | 'character' | null
+type PanelKind = 'memories' | 'shop' | 'schedule' | 'schedule-generator' | 'album' | 'character' | null
 
 // 等比例覆盖在像素画某个物件上的透明热区按钮
 function RoomHotspot({
@@ -425,6 +429,31 @@ export function CozyRoom() {
           uiHidden={uiHidden}
         />
 
+        {/* 右下角：生成日程按钮（Test 控制面板功能） */}
+        <button
+          onClick={() => setPanel('schedule-generator')}
+          className={`ui-fade absolute z-30 flex items-center gap-1.5 rounded-full border-2 border-primary/50 bg-primary/10 px-3 py-1.5 font-cute text-xs text-primary shadow-md backdrop-blur transition-transform hover:scale-105 active:scale-95 ${uiHidden ? 'ui-hidden' : ''}`}
+          style={{ left: '78%', top: '82%' }}
+        >
+          ✨ 生成日程
+        </button>
+
+        {/* 书架上的便利贴/记事本 (日程) */}
+        <RoomHotspot
+          label="日程"
+          onClick={() => setPanel('schedule')}
+          style={{ left: '77%', top: '30%' }}
+          size="13%"
+          uiHidden={uiHidden}
+        />
+        <RoomHotspot
+          label="物品"
+          onClick={() => setPanel('shop')}
+          style={{ left: '83%', top: '73%' }}
+          size="14%"
+          uiHidden={uiHidden}
+        />
+
         {/* 书架上的便利贴/记事本 (日程) */}
         <RoomHotspot
           label="日程"
@@ -514,6 +543,11 @@ export function CozyRoom() {
       </p>
 
       {/* 功能面板 */}
+      <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
+      <ShopPanel open={panel === 'shop'} onClose={() => setPanel(null)} />
+      <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} />
+      <ScheduleGenerator open={panel === 'schedule-generator'} onClose={() => setPanel(null)} />
+      <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} />
       <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
       <ShopPanel open={panel === 'shop'} onClose={() => setPanel(null)} />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} />
