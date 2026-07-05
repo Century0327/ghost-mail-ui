@@ -314,38 +314,48 @@ export function CozyRoom() {
 
         {/* ── 透明热区按钮：覆盖在像素画对应物件上 ── */}
 
-        {/* 台灯 — 覆盖在左侧茶几上的灯，精确贴合像素灯位置 */}
+        {/* 台灯 — 左移 1.5 倍自身宽度(14%×1.5≈21%) 精确贴合像素灯 */}
         <RoomHotspot
           label={isNight ? '关灯' : '开灯'}
           onClick={() => setIsNight((v) => !v)}
-          style={{ left: '27%', top: '56%' }}
+          style={{ left: '8%', top: '55%' }}
           size="14%"
           uiHidden={uiHidden}
         />
 
-        {/* 相框 (相册) — 沙发上方左侧墙上的相框 */}
+        {/* 相框 (相册) — 左下移 2 个自身大小 */}
         <RoomHotspot
           label="相册"
           onClick={() => setPanel('album')}
-          style={{ left: '20%', top: '27%' }}
+          style={{ left: '6%', top: '40%' }}
           size="15%"
           uiHidden={uiHidden}
         />
 
-        {/* 地板上的信 (记忆) */}
-        <RoomHotspot
-          label="记忆"
+        {/* 地板上的信 (记忆) — 恢复像素图标，左上移一点 */}
+        <button
           onClick={() => setPanel('memories')}
-          style={{ left: '43%', top: '80%' }}
-          size="13%"
-          uiHidden={uiHidden}
-        />
+          style={{ left: '40%', top: '77%' }}
+          className="group absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center focus:outline-none"
+          aria-label="记忆"
+        >
+          <img
+            src="/room/letter.png"
+            alt="记忆"
+            style={{ width: '12%', minWidth: '52px' }}
+            className="pixelated drop-shadow-[0_4px_6px_rgba(90,60,40,0.25)] transition-transform group-hover:-translate-y-1 group-hover:scale-105"
+            draggable={false}
+          />
+          <span className={`ui-fade mt-1 rounded-full border-2 border-border bg-card/95 px-3 py-0.5 font-cute text-sm text-card-foreground shadow-md ${uiHidden ? 'ui-hidden' : ''}`}>
+            记忆
+          </span>
+        </button>
 
-        {/* 右下角购物车 (物品) */}
+        {/* 右下角购物车 (物品) — 左上移一点 */}
         <RoomHotspot
           label="物品"
           onClick={() => setPanel('shop')}
-          style={{ left: '87%', top: '77%' }}
+          style={{ left: '83%', top: '73%' }}
           size="14%"
           uiHidden={uiHidden}
         />
@@ -403,11 +413,11 @@ export function CozyRoom() {
           </div>
         )}
 
-        {/* 想法气泡 — 紧贴猫右上侧，圆圈连接 */}
+        {/* 想法气泡 — 贴近猫，往左下调整 */}
         {showThought && (
           <div
             className="absolute -translate-y-full"
-            style={{ left: `${catPos.x + 4}%`, top: `${catPos.y - 14}%`, zIndex: catZIndex + 1 }}
+            style={{ left: `${catPos.x - 3}%`, top: `${catPos.y - 9}%`, zIndex: catZIndex + 1 }}
           >
             <ThoughtBubble text={thought!} onClick={() => setPanel('schedule')} />
           </div>
