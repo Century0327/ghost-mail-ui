@@ -1,7 +1,7 @@
 // 陪伴系统 API 调用层
 // 对接后端 https://random-ai-mail-ghost.vercel.app
 
-const API_BASE = 'https://random-ai-mail-ghost.vercel.app'
+const API_BASE = '' // 使用相对路径，由 vercel.json rewrite 代理到后端
 
 function getDeviceId(): string {
   if (typeof window === 'undefined') return 'server'
@@ -61,6 +61,55 @@ export const companionApi = {
 
   // 获取用户物品
   getUserItems: () => apiFetch('/api/companion/user/items'),
+
+  // ============ 新增：信件 API ============
+
+  // 获取信件列表
+  getLetters: (characterId?: string) => {
+    const query = characterId ? `?character_id=${characterId}` : ''
+    return apiFetch(`/api/companion/letters${query}`)
+  },
+
+  // 创建信件（后端 AI 调用时使用）
+  createLetter: (data: {
+    character_id: string
+    subject: string
+    body: string
+    source?: string
+    attachment_url?: string
+  }) =>
+    apiFetch('/api/companion/letters', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // ============ 新增：对话 API ============
+
+  // 获取对话历史
+  getConversations: (characterId?: string) => {
+    const query = characterId ? `?character_id=${characterId}` : ''
+    return apiFetch(`/api/companion/conversations${query}`)
+  },
+
+  // 记录对话
+  createConversation: (data: {
+    character_id: string
+    role: 'ghost' | 'user'
+    sender?: string
+    content: string
+  }) =>
+    apiFetch('/api/companion/conversations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // ============ 新增：附件/相册 API ============
+
+  // 获取附件列表
+  getAttachments: (characterId?: string) => {
+    const query = characterId ? `?character_id=${characterId}` : ''
+    return apiFetch(`/api/companion/attachments${query}`)
+  },
 }
 
 export default companionApi
