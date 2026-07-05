@@ -37,8 +37,37 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
   const loadLetters = async () => {
     setLoading(true)
     try {
+      // 从后端 API 获取信件
       const result = await companionApi.getLetters(characterId)
-      const mapped = result.letters.map((l) => ({
+      // 从 localStorage 获取收藏状态
+      const localLetters = companionLocal.getLetters(characterId)
+      const localFavIds = new Set(localLetters.filter((l) => l.isFavorite).map((l) => l.id))
+      
+      const mapped = result.letters.map((l) => {
+        // 优先使用后端返回的 category，如果没有则根据 isFavorite 判断
+        let category: LetterCategory = 'all'
+        if (l.category === 'event') {
+          category = 'event'
+        } else if (l.isFavorite || localFavIds.has(l.id)) {
+          category = 'favorite'
+        }
+        
+        return {
+          id: l.id,
+          title: l.subject || '无标题',
+          date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+          preview: l.body?.slice(0, 30) + (l.body?.length > 30 ? '...' : '') || '',
+          body: l.body || '',
+          image: l.attachmentUrl,
+          category,
+        }
+      })
+      setLetters(mapped)
+    } catch (err) {
+      console.error('Failed to load letters:', err)
+      // 后端失败时回退到 localStorage
+      const localLetters = companionLocal.getLetters(characterId)
+      setLetters(localLetters.map((l) => ({
         id: l.id,
         title: l.subject || '无标题',
         date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
@@ -46,11 +75,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
         body: l.body || '',
         image: l.attachmentUrl,
         category: (l.isFavorite ? 'favorite' : 'all') as LetterCategory,
-      }))
-      setLetters(mapped)
-    } catch (err) {
-      console.error('Failed to load letters:', err)
-      setLetters([])
+      })))
     } finally {
       setLoading(false)
     }
@@ -58,7 +83,14 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
 
   const toggleFavorite = async (letterId: string) => {
     companionLocal.toggleFavorite(letterId)
-    await loadLetters()
+    // 立即更新本地状态，不等待后端刷新
+    setLetters((prev) =>
+      prev.map((l) =>
+        l.id === letterId
+          ? { ...l, category: l.category === 'favorite' ? 'all' : 'favorite' }
+          : l
+      )
+    )
   }
 
   const handleClose = () => {
