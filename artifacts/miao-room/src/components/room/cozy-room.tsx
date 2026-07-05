@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Heart } from 'lucide-react'
 import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, type Character } from '@/lib/companion-data'
 import { companionApi } from '@/lib/companion-api'
+import { companionLocal } from '@/lib/companion-local'
 import { SpeechBubble } from './speech-bubble'
 import { ThoughtBubble } from './thought-bubble'
 import { MemoriesPanel } from './memories-panel'
-import { ShopPanel } from './shop-panel'
+import { ShopPanel, type InventoryItem } from './shop-panel'
 import { SchedulePanel } from './schedule-panel'
 import { SettingsMenu } from './settings-menu'
 import { AlbumPanel } from './album-panel'
@@ -117,6 +118,13 @@ export function CozyRoom() {
   const [catAnim, setCatAnim] = useState<'idle' | 'walk' | 'jump'>('idle')
   const [moveDuration, setMoveDuration] = useState(0.9)
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null)
+  const [coins, setCoins] = useState(100)
+  const [previewItems, setPreviewItems] = useState<InventoryItem[]>([])
+
+  // 加载代币数据
+  useEffect(() => {
+    setCoins(companionLocal.getCoins?.() || 100)
+  }, [])
 
   // 拖动状态
   const [isDragging, setIsDragging] = useState(false)
@@ -358,8 +366,12 @@ export function CozyRoom() {
         {uiHidden ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
       </button>
 
-      {/* 右上角：用户头像 + 设置 */}
-      <div className={`ui-fade fixed right-4 top-4 z-40 ${uiHidden ? 'ui-hidden' : ''}`}>
+      {/* 右上角：罐罐 + 用户头像 + 设置 */}
+      <div className={`ui-fade fixed right-4 top-4 z-40 flex items-center gap-2 ${uiHidden ? 'ui-hidden' : ''}`}>
+        <span className="flex items-center gap-1 rounded-full border-2 border-border bg-card/90 px-3 py-2 font-pixel text-sm shadow-lg backdrop-blur">
+          <span className="text-base">🥫</span>
+          {coins}
+        </span>
         <button
           onClick={() => setSettingsOpen((v) => !v)}
           className="flex size-11 items-center justify-center overflow-hidden rounded-full border-2 border-border bg-secondary shadow-lg transition-transform hover:scale-105 active:scale-95"
@@ -409,6 +421,34 @@ export function CozyRoom() {
             }}
           />
         )}
+
+        {/* 预览物品 */}
+        {previewItems.map((item) => (
+          <div
+            key={item.id}
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300"
+            style={{
+              left: `${item.position?.x || 50}%`,
+              top: `${item.position?.y || 50}%`,
+              transform: `translate(-50%, -50%) rotate(${item.rotation || 0}deg)`,
+              opacity: item.hidden ? 0.3 : 1,
+              zIndex: Math.floor((item.position?.y || 50) / 8) + 10,
+            }}
+          >
+            {item.image ? (
+              <img
+                src={item.image}
+                alt={item.name}
+                className="pixelated w-14 object-contain drop-shadow-md"
+              />
+            ) : (
+              <div
+                className="size-14 rounded-xl border-2 border-border/60"
+                style={{ backgroundColor: item.emojiColor }}
+              />
+            )}
+          </div>
+        ))}
 
         {/* ── 透明热区按钮：覆盖在像素画对应物件上 ── */}
 
@@ -553,7 +593,11 @@ export function CozyRoom() {
 
       {/* 功能面板 */}
       <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
-      <ShopPanel open={panel === 'shop'} onClose={() => setPanel(null)} />
+      <ShopPanel
+        open={panel === 'shop'}
+        onClose={() => { setPanel(null); setCoins(companionLocal.getCoins?.() || 100); }}
+        onPreviewChange={setPreviewItems}
+      />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
       <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} />
       <CharacterSelector

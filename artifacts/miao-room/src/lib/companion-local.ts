@@ -8,6 +8,7 @@ export interface CompanionState {
   deviceId: string
   characters: Record<string, CharacterLocalState>
   items: string[] // 拥有的物品 ID
+  coins: number // 罐罐代币
   letters: Letter[]
   conversations: Conversation[]
   attachments: Attachment[]
@@ -159,6 +160,7 @@ export const companionLocal = {
       deviceId,
       characters: {},
       items: ['cat_bed', 'carpet', 'lamp'],
+      coins: 100,
       letters: [],
       conversations: [],
       attachments: [],
@@ -172,6 +174,7 @@ export const companionLocal = {
       ...state,
       characters: state.characters || {},
       items: state.items || defaults.items,
+      coins: state.coins ?? defaults.coins,
       letters: state.letters || [],
       conversations: state.conversations || [],
       attachments: state.attachments || [],
@@ -435,6 +438,25 @@ export const companionLocal = {
       state.items.push(itemId)
       this.saveState(state)
     }
+  },
+
+  // ==================== 代币（罐罐）====================
+
+  getCoins(): number {
+    return this.getState().coins
+  },
+
+  setCoins(amount: number): void {
+    const state = this.getState()
+    state.coins = Math.max(0, amount)
+    this.saveState(state)
+  },
+
+  addCoins(amount: number): number {
+    const state = this.getState()
+    state.coins = Math.max(0, state.coins + amount)
+    this.saveState(state)
+    return state.coins
   },
 
   // ==================== 重置 ====================

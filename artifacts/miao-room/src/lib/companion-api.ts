@@ -213,7 +213,18 @@ export const companionApi = {
     try {
       const query = characterId ? `?character_id=${characterId}` : ''
       const result = await apiFetch(`/api/companion/schedules${query}`)
-      return { schedules: result.schedules || [] }
+      let list: any[] = []
+      if (Array.isArray(result.schedules)) {
+        list = result.schedules
+      } else if (result.schedules && typeof result.schedules === 'object') {
+        if (characterId && result.schedules[characterId]) {
+          list = result.schedules[characterId]
+        } else {
+          const keys = Object.keys(result.schedules)
+          if (keys.length > 0) list = result.schedules[keys[0]]
+        }
+      }
+      return { schedules: list }
     } catch {
       return { schedules: companionLocal.getTodaySchedule(characterId || 'maodie') }
     }
