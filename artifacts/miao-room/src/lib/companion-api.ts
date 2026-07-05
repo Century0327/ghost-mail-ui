@@ -40,15 +40,11 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
 export const companionApi = {
   // ========== 只读配置（后端提供） ==========
 
-  // 获取角色列表
   getCharacters: () => apiFetch('/api/companion/characters'),
-
-  // 获取物品列表
   getItems: () => apiFetch('/api/companion/items'),
 
   // ========== 动态状态（本地优先） ==========
 
-  // 获取角色状态（含日程）→ 本地存储
   getCharacterStatus: (id: string) => {
     const localState = companionLocal.getCharacterState(id)
     return Promise.resolve({
@@ -63,7 +59,6 @@ export const companionApi = {
     })
   },
 
-  // 记录互动 → 本地存储
   interact: (id: string, type: 'click' | 'drag' | 'double_click' = 'click') => {
     const newState = companionLocal.interact(id, type)
     return Promise.resolve({
@@ -75,7 +70,6 @@ export const companionApi = {
     })
   },
 
-  // 更新位置 → 本地存储
   updatePosition: (id: string, x: number, y: number) => {
     const newState = companionLocal.updatePosition(id, x, y)
     return Promise.resolve({
@@ -84,18 +78,14 @@ export const companionApi = {
     })
   },
 
-  // ========== 用户物品（本地） ==========
-
   getUserItems: () => Promise.resolve({ items: companionLocal.getItems() }),
 
   // ========== 信件（后端 API + 本地缓存） ==========
 
   getLetters: async (characterId?: string): Promise<{ letters: Letter[] }> => {
     try {
-      // 先尝试从后端获取
       const query = characterId ? `?character_id=${characterId}` : ''
       const result = await apiFetch(`/api/companion/letters${query}`)
-      // 合并到本地缓存
       if (result.letters?.length) {
         const state = companionLocal.getState()
         const existingIds = new Set(state.letters.map((l) => l.id))
@@ -114,7 +104,6 @@ export const companionApi = {
       }
       return { letters: companionLocal.getLetters(characterId) }
     } catch {
-      // 后端不可用时返回本地缓存
       return { letters: companionLocal.getLetters(characterId) }
     }
   },
@@ -206,6 +195,18 @@ export const companionApi = {
       return { attachments: companionLocal.getAttachments(characterId) }
     }
   },
+
+  // ========== AI 日程生成 ==========
+
+  generateSchedule: (data: {
+    character_id: string
+    last_schedule?: any[]
+    history_summary?: string
+    interact_count?: number
+  }) => apiFetch('/api/companion/generate-schedule', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 }
 
 export default companionApi
