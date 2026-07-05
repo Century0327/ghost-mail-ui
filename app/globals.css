@@ -231,6 +231,15 @@
     touch-action: none;
   }
 
+  /* 隐藏滚动条但保持滚动功能 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Click feedback for the Add button: an expanding ripple from the pointer
      and a quick squash-and-pop on the button itself. */
   .btn-ripple {

@@ -1,16 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Heart, Zap, Star } from 'lucide-react'
-import { CAT_SAYINGS, CAT_THOUGHTS } from '@/lib/companion-data'
+import { Eye, EyeOff, Heart, Image, Users } from 'lucide-react'
+import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, type Character } from '@/lib/companion-data'
 import { SpeechBubble } from './speech-bubble'
 import { ThoughtBubble } from './thought-bubble'
 import { MemoriesPanel } from './memories-panel'
 import { ShopPanel } from './shop-panel'
 import { SchedulePanel } from './schedule-panel'
 import { SettingsMenu } from './settings-menu'
+import { AlbumPanel } from './album-panel'
+import { CharacterSelector } from './character-selector'
 
-type PanelKind = 'memories' | 'shop' | 'schedule' | null
+type PanelKind = 'memories' | 'shop' | 'schedule' | 'album' | 'character' | null
 
 // 房间里的一件可互动物品：像素精灵 + 圆润标签。
 function RoomObject({
@@ -56,23 +58,32 @@ function RoomObject({
   )
 }
 
-// 角色信息条（血条样式）
+// 角色信息条（血条样式）- 跟随角色位置
 function CharacterInfoBar({
   visible,
   name,
   statValue,
   statName,
   stage,
+  position,
 }: {
   visible: boolean
   name: string
   statValue: number
   statName: string
   stage: string
+  position: { x: number; y: number }
 }) {
   if (!visible) return null
   return (
-    <div className="animate-bubble-in pointer-events-none absolute left-1/2 top-[40%] z-30 w-48 -translate-x-1/2 -translate-y-full">
+    <div
+      className="animate-bubble-in pointer-events-none absolute z-30 w-48"
+      style={{
+        left: `${position.x}%`,
+        top: `${position.y - 25}%`,
+        transform: 'translate(-50%, 0)'
+      }}
+    >
       <div className="rounded-2xl border-2 border-border bg-card/95 px-4 py-3 shadow-lg">
         <div className="flex items-center justify-between mb-1.5">
           <span className="font-cute text-sm font-bold text-foreground">{name}</span>
@@ -102,16 +113,23 @@ export function CozyRoom() {
   const [thought, setThought] = useState<string | null>(null)
   const [infoBarVisible, setInfoBarVisible] = useState(false)
   const [isNight, setIsNight] = useState(false)
-  
+
+  // 当前角色
+  const [currentCharacter, setCurrentCharacter] = useState<Character>(OFFICIAL_CHARACTERS[0])
+  const [ownedCharacterIds, setOwnedCharacterIds] = useState<string[]>(['char-kitty']) // 默认拥有第一个角色
+
   // 猫的位置（可拖动）
   const [catPos, setCatPos] = useState({ x: 50, y: 60 }) // 百分比
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef<{ x: number; y: number; catX: number; catY: number } | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const roomRef = useRef<HTMLDivElement>(null)
-  
+
   const speechTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const infoBarTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTouchTimeRef = useRef<number>(0)
+  const touchCountRef = useRef<number>(0)
 
   // 自动夜间模式
   useEffect(() => {
@@ -130,14 +148,59 @@ export function CozyRoom() {
     speechTimer.current = setTimeout(() => setSpeech(null), 3600)
   }, [isDragging])
 
-  // 双击猫：显示信息条
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setSpeech(null)
-    setThought(null)
-    setInfoBarVisible(true)
-    if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
-    infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+  // PC端：鼠标悬停显示信息条
+  const handleMouseEnter = useCallback(() => {
+    if (isDragging) return
+    // 延迟300ms显示，避免误触
+    hoverTimerRef.current = setTimeout(() => {
+      setSpeech(null)
+      setThought(null)
+      setInfoBarVisible(true)
+      if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
+      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+    }, 300)
+  }, [isDragging])
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }, [])
+
+  // 移动端：双击或双指单击显示信息条
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const now = Date.now()
+    const touchCount = e.touches.length
+
+    // 双指单击：显示信息条
+    if (touchCount >= 2) {
+      e.preventDefault()
+      setSpeech(null)
+      setThought(null)
+      setInfoBarVisible(true)
+      if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
+      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+      touchCountRef.current = 0
+      lastTouchTimeRef.current = 0
+      return
+    }
+
+    // 单指双击检测
+    if (now - lastTouchTimeRef.current < 400 && touchCountRef.current === 1) {
+      // 双击：显示信息条
+      e.preventDefault()
+      setSpeech(null)
+      setThought(null)
+      setInfoBarVisible(true)
+      if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
+      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+      touchCountRef.current = 0
+      lastTouchTimeRef.current = 0
+    } else {
+      touchCountRef.current = 1
+      lastTouchTimeRef.current = now
+    }
   }, [])
 
   // 猫偶尔自己冒出的想法
@@ -257,11 +320,20 @@ export function CozyRoom() {
 
       {/* 左上角：相册入口 */}
       <button
-        onClick={() => { /* TODO: 相册功能 */ }}
+        onClick={() => setPanel('album')}
         className={`ui-fade fixed left-4 top-20 z-40 flex items-center gap-2 rounded-full border-2 border-border bg-card/90 px-3 py-2 shadow-lg backdrop-blur transition-transform hover:scale-105 active:scale-95 ${uiHidden ? 'ui-hidden' : ''}`}
       >
-        <Zap className="size-4 text-primary" />
+        <Image className="size-4 text-primary" />
         <span className="font-cute text-sm">相册</span>
+      </button>
+
+      {/* 左下角：角色切换入口 */}
+      <button
+        onClick={() => setPanel('character')}
+        className={`ui-fade fixed left-4 bottom-20 z-40 flex items-center gap-2 rounded-full border-2 border-border bg-card/90 px-3 py-2 shadow-lg backdrop-blur transition-transform hover:scale-105 active:scale-95 ${uiHidden ? 'ui-hidden' : ''}`}
+      >
+        <Users className="size-4 text-primary" />
+        <span className="font-cute text-sm">角色</span>
       </button>
 
       {/* 房间舞台 */}
@@ -333,18 +405,20 @@ export function CozyRoom() {
           float
         />
 
-        {/* 猫咪：可点击、可双击、可拖动 */}
+        {/* 猫咪/角色：可点击、PC端悬停显示信息、移动端双击/双指显示信息、长按拖动 */}
         <button
           onClick={petCat}
-          onDoubleClick={handleDoubleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onTouchStart={handleTouchStart}
           onPointerDown={handleCatPointerDown}
-          aria-label="摸摸猫咪"
+          aria-label={`摸摸${currentCharacter.name}`}
           className={`absolute z-20 flex flex-col items-center focus:outline-none ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}`}
           style={{ left: `${catPos.x}%`, top: `${catPos.y}%`, transform: 'translate(-50%, -50%)' }}
         >
           <img
-            src="/room/cat.png"
-            alt="陪伴你的小猫"
+            src={currentCharacter.image}
+            alt={currentCharacter.name}
             style={{ width: '30%', minWidth: '150px' }}
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${isDragging ? '' : 'animate-breathe'}`}
             draggable={false}
@@ -371,29 +445,51 @@ export function CozyRoom() {
           </div>
         )}
 
-        {/* 角色信息条（双击时）—— 跟随猫 */}
+        {/* 角色信息条（PC悬停/移动端双击或双指时）—— 跟随猫 */}
         <CharacterInfoBar
           visible={infoBarVisible}
-          name="耄耋"
+          name={currentCharacter.name}
           statValue={72}
-          statName="哈气值"
+          statName={currentCharacter.statName}
           stage="悠闲阶段"
+          position={catPos}
         />
       </div>
 
       {/* 底部小提示 */}
       <p
-        className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur ${
+        className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur sm:hidden ${
           uiHidden ? 'ui-hidden' : ''
         }`}
       >
-        点击房间里的物品探索 · 双击猫咪查看状态 · 长按拖动猫咪
+        点击物品探索 · 双击/双指摸{currentCharacter.name}查看状态 · 长按拖动
+      </p>
+      <p
+        className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur hidden sm:block ${
+          uiHidden ? 'ui-hidden' : ''
+        }`}
+      >
+        点击物品探索 · 悬停{currentCharacter.name}查看状态 · 长按拖动
       </p>
 
       {/* 功能弹窗 */}
       <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
       <ShopPanel open={panel === 'shop'} onClose={() => setPanel(null)} />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} />
+      <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} />
+      <CharacterSelector
+        open={panel === 'character'}
+        onClose={() => setPanel(null)}
+        currentCharacterId={currentCharacter.id}
+        ownedCharacterIds={ownedCharacterIds}
+        onSelectCharacter={(char) => {
+          setCurrentCharacter(char)
+          if (!ownedCharacterIds.includes(char.id)) {
+            setOwnedCharacterIds((ids) => [...ids, char.id])
+          }
+          setPanel(null)
+        }}
+      />
     </div>
   )
 }
