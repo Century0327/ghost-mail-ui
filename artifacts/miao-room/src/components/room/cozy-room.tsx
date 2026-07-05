@@ -1,5 +1,4 @@
 
-
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Heart, Image, Users } from 'lucide-react'
 import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, type Character } from '@/lib/companion-data'
@@ -46,6 +45,7 @@ function RoomObject({
         alt={alt}
         style={{ width: size }}
         className="pixelated drop-shadow-[0_6px_10px_rgba(90,60,40,0.28)] transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-105"
+        draggable={false}
       />
       <span
         className={`ui-fade mt-1 rounded-full border-2 border-border bg-card/95 px-3 py-0.5 font-cute text-sm text-card-foreground shadow-md ${
@@ -53,6 +53,106 @@ function RoomObject({
         }`}
       >
         {label}
+      </span>
+    </button>
+  )
+}
+
+// 便利贴（日程入口）—— 纯 CSS，不依赖图片资源
+function StickyNoteButton({
+  onClick,
+  uiHidden,
+  style,
+}: {
+  onClick: () => void
+  uiHidden: boolean
+  style: React.CSSProperties
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={style}
+      aria-label="日程便利贴"
+      className={`group absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center focus:outline-none animate-float ${uiHidden ? 'ui-hidden' : ''}`}
+    >
+      {/* 便利贴主体 */}
+      <div className="relative w-14 h-14 rounded-sm shadow-md transition-transform duration-200 group-hover:-translate-y-1 group-hover:rotate-2"
+        style={{
+          background: 'linear-gradient(145deg, #fde68a, #fcd34d)',
+          boxShadow: '2px 3px 8px rgba(90,60,20,0.3)',
+        }}
+      >
+        {/* 便利贴折角 */}
+        <div className="absolute bottom-0 right-0 w-0 h-0"
+          style={{
+            borderStyle: 'solid',
+            borderWidth: '0 0 10px 10px',
+            borderColor: 'transparent transparent #d97706 transparent',
+          }}
+        />
+        {/* 便利贴文字线条 */}
+        <div className="absolute inset-2 flex flex-col justify-center gap-1.5">
+          <div className="h-0.5 rounded-full bg-amber-600/30 w-full" />
+          <div className="h-0.5 rounded-full bg-amber-600/30 w-4/5" />
+          <div className="h-0.5 rounded-full bg-amber-600/30 w-3/5" />
+        </div>
+      </div>
+      {/* 标签 */}
+      <span
+        className={`ui-fade mt-1 rounded-full border-2 border-border bg-card/95 px-3 py-0.5 font-cute text-sm text-card-foreground shadow-md transition-opacity ${
+          uiHidden ? 'ui-hidden' : ''
+        }`}
+      >
+        日程
+      </span>
+    </button>
+  )
+}
+
+// 台灯按钮（切换夜间模式）
+function LampButton({
+  isNight,
+  onClick,
+  uiHidden,
+}: {
+  isNight: boolean
+  onClick: () => void
+  uiHidden: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`group absolute z-30 flex flex-col items-center focus:outline-none ${uiHidden ? 'pointer-events-none' : ''}`}
+      style={{ left: '22%', top: '42%' }}
+      aria-label={isNight ? '关灯' : '开灯'}
+    >
+      {/* 灯泡光晕 */}
+      {isNight && (
+        <div
+          className="absolute -top-4 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full pointer-events-none transition-all duration-700"
+          style={{ background: 'radial-gradient(circle, rgba(255,228,100,0.55) 0%, transparent 70%)' }}
+        />
+      )}
+      {/* 灯罩 */}
+      <div
+        className="w-6 h-7 transition-all duration-500"
+        style={{
+          background: isNight
+            ? 'radial-gradient(ellipse at 50% 80%, #ffe47d 0%, #f59e0b 60%, #b45309 100%)'
+            : 'linear-gradient(180deg, #d6cbb8 0%, #b0a28c 100%)',
+          borderRadius: '40% 40% 50% 50%',
+          boxShadow: isNight ? '0 0 12px 4px rgba(255,220,80,0.5)' : 'none',
+        }}
+      />
+      {/* 灯杆 */}
+      <div className="w-1 h-3 rounded-b-sm" style={{ background: '#8b6c45' }} />
+      {/* 标签 */}
+      <span
+        className={`ui-fade mt-1 rounded-full border border-border bg-card/90 px-2 py-0.5 font-cute text-[10px] text-card-foreground shadow-sm transition-opacity ${
+          uiHidden ? 'ui-hidden' : ''
+        }`}
+      >
+        {isNight ? '关灯' : '开灯'}
       </span>
     </button>
   )
@@ -116,10 +216,10 @@ export function CozyRoom() {
 
   // 当前角色
   const [currentCharacter, setCurrentCharacter] = useState<Character>(OFFICIAL_CHARACTERS[0])
-  const [ownedCharacterIds, setOwnedCharacterIds] = useState<string[]>(['char-kitty']) // 默认拥有第一个角色
+  const [ownedCharacterIds, setOwnedCharacterIds] = useState<string[]>(['char-kitty'])
 
   // 猫的位置（可拖动）
-  const [catPos, setCatPos] = useState({ x: 50, y: 60 }) // 百分比
+  const [catPos, setCatPos] = useState({ x: 50, y: 60 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef<{ x: number; y: number; catX: number; catY: number } | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -131,13 +231,16 @@ export function CozyRoom() {
   const lastTouchTimeRef = useRef<number>(0)
   const touchCountRef = useRef<number>(0)
 
-  // 自动夜间模式
+  // 自动夜间模式（晚6点后 / 早6点前）
   useEffect(() => {
     const hour = new Date().getHours()
     setIsNight(hour >= 18 || hour < 6)
   }, [])
 
-  // 点击猫：随机说一句话（对话气泡），几秒后消失。
+  // 切换夜间模式
+  const toggleNight = useCallback(() => setIsNight((v) => !v), [])
+
+  // 点击猫：随机说一句话
   const petCat = useCallback(() => {
     if (isDragging) return
     const line = CAT_SAYINGS[Math.floor(Math.random() * CAT_SAYINGS.length)]
@@ -151,7 +254,6 @@ export function CozyRoom() {
   // PC端：鼠标悬停显示信息条
   const handleMouseEnter = useCallback(() => {
     if (isDragging) return
-    // 延迟300ms显示，避免误触
     hoverTimerRef.current = setTimeout(() => {
       setSpeech(null)
       setThought(null)
@@ -173,7 +275,6 @@ export function CozyRoom() {
     const now = Date.now()
     const touchCount = e.touches.length
 
-    // 双指单击：显示信息条
     if (touchCount >= 2) {
       e.preventDefault()
       setSpeech(null)
@@ -186,9 +287,7 @@ export function CozyRoom() {
       return
     }
 
-    // 单指双击检测
     if (now - lastTouchTimeRef.current < 400 && touchCountRef.current === 1) {
-      // 双击：显示信息条
       e.preventDefault()
       setSpeech(null)
       setThought(null)
@@ -203,7 +302,7 @@ export function CozyRoom() {
     }
   }, [])
 
-  // 猫偶尔自己冒出的想法
+  // 猫自己冒出的想法气泡
   useEffect(() => {
     if (uiHidden || infoBarVisible) {
       setThought(null)
@@ -237,22 +336,14 @@ export function CozyRoom() {
   // 长按拖动逻辑
   const handleCatPointerDown = useCallback((e: React.PointerEvent) => {
     if (!roomRef.current) return
-    const rect = roomRef.current.getBoundingClientRect()
     const clientX = e.clientX
     const clientY = e.clientY
-    
     longPressTimer.current = setTimeout(() => {
       setIsDragging(true)
       setSpeech(null)
       setThought(null)
       setInfoBarVisible(false)
-      dragStartRef.current = {
-        x: clientX,
-        y: clientY,
-        catX: catPos.x,
-        catY: catPos.y,
-      }
-      // 改变光标
+      dragStartRef.current = { x: clientX, y: clientY, catX: catPos.x, catY: catPos.y }
       if (roomRef.current) roomRef.current.style.cursor = 'grabbing'
     }, 500)
   }, [catPos])
@@ -284,21 +375,14 @@ export function CozyRoom() {
 
   const showThought = !uiHidden && !!thought && !speech && !infoBarVisible && !isDragging
 
-  // 切换夜间模式
-  const toggleNight = useCallback(() => {
-    setIsNight((v) => !v)
-  }, [])
-
   return (
     <div className={`relative flex min-h-[100dvh] items-center justify-center overflow-hidden p-3 ${isNight ? 'dark' : ''}`}>
+      {/* 背景色 */}
       <div className={`absolute inset-0 transition-colors duration-700 ${isNight ? 'bg-[#2a2420]' : 'bg-background'}`} />
 
-      {/* 一键收起：眼睛按钮 */}
+      {/* 眼睛按钮（一键收起 UI） */}
       <button
-        onClick={() => {
-          setUiHidden((v) => !v)
-          setSettingsOpen(false)
-        }}
+        onClick={() => { setUiHidden((v) => !v); setSettingsOpen(false) }}
         aria-label={uiHidden ? '显示界面' : '隐藏界面'}
         className="fixed left-4 top-4 z-40 flex size-11 items-center justify-center rounded-full border-2 border-border bg-card/90 text-foreground shadow-lg backdrop-blur transition-transform hover:scale-105 active:scale-95"
       >
@@ -344,32 +428,22 @@ export function CozyRoom() {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
       >
-        {/* 房间背景 */}
+        {/* 房间背景 — 夜间用 CSS filter 代替缺失的 room-bg-night.png */}
         <img
-          src={isNight ? '/room/room-bg-night.png' : '/room/room-bg.png'}
+          src="/room/room-bg.png"
           alt="温暖的像素小房间"
-          className="pixelated absolute inset-0 size-full rounded-[2rem] object-contain"
+          className="pixelated absolute inset-0 size-full rounded-[2rem] object-contain transition-all duration-700"
+          style={isNight ? { filter: 'brightness(0.42) sepia(0.25) saturate(0.7)' } : {}}
           draggable={false}
         />
-        
-        {/* 夜间模式遮罩 */}
+
+        {/* 夜间微暖色调遮罩 */}
         {isNight && (
-          <div className="absolute inset-0 rounded-[2rem] bg-[#1a1510]/40 pointer-events-none" />
+          <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-[#1a0f05]/25 transition-all duration-700" />
         )}
 
-        {/* 台灯（可点击切换夜间模式） */}
-        <button
-          onClick={toggleNight}
-          className={`group absolute z-30 flex flex-col items-center focus:outline-none ${uiHidden ? 'ui-hidden' : ''}`}
-          style={{ left: '22%', top: '38%' }}
-        >
-          <div className="relative">
-            <div className={`w-8 h-10 rounded-full transition-all duration-500 ${isNight ? 'bg-[#ffe4a0] shadow-[0_0_20px_rgba(255,228,160,0.6)]' : 'bg-[#d4c4a8]'}`} />
-            <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 font-cute text-[10px] whitespace-nowrap transition-opacity ${uiHidden ? 'opacity-0' : 'opacity-100'}`}>
-              {isNight ? '关灯' : '开灯'}
-            </div>
-          </div>
-        </button>
+        {/* 台灯（切换夜间模式） */}
+        <LampButton isNight={isNight} onClick={toggleNight} uiHidden={uiHidden} />
 
         {/* 记忆 → 地板上的信 */}
         <RoomObject
@@ -382,10 +456,10 @@ export function CozyRoom() {
           onClick={() => setPanel('memories')}
         />
 
-        {/* 商店 → 右下角（保留，等待大改） */}
+        {/* 物品 → 右下角购物车 */}
         <RoomObject
           src="/room/cart.png"
-          alt="喵屋小店"
+          alt="物品仓库"
           label="物品"
           size="14%"
           style={{ left: '88%', top: '78%' }}
@@ -393,19 +467,14 @@ export function CozyRoom() {
           onClick={() => setPanel('shop')}
         />
 
-        {/* 日程 → 书架上的便利贴 */}
-        <RoomObject
-          src="/room/sticky-note.png"
-          alt="日程便利贴"
-          label="日程"
-          size="10%"
-          style={{ left: '78%', top: '28%' }}
-          uiHidden={uiHidden}
+        {/* 日程 → 书架上的便利贴（纯 CSS，不依赖图片） */}
+        <StickyNoteButton
           onClick={() => setPanel('schedule')}
-          float
+          uiHidden={uiHidden}
+          style={{ left: '78%', top: '28%' }}
         />
 
-        {/* 猫咪/角色：可点击、PC端悬停显示信息、移动端双击/双指显示信息、长按拖动 */}
+        {/* 猫咪/角色 */}
         <button
           onClick={petCat}
           onMouseEnter={handleMouseEnter}
@@ -420,13 +489,13 @@ export function CozyRoom() {
             src={currentCharacter.image}
             alt={currentCharacter.name}
             style={{ width: '30%', minWidth: '150px' }}
-            className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${isDragging ? '' : 'animate-breathe'}`}
+            className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${isDragging ? 'scale-105' : 'animate-breathe'}`}
             draggable={false}
           />
         </button>
 
-        {/* 对话气泡（点击猫时）—— 跟随猫 */}
-        {speech && (
+        {/* 对话气泡（点击时）—— 跟随猫 */}
+        {speech && !infoBarVisible && (
           <div
             className="pointer-events-none absolute z-20 -translate-y-full"
             style={{ left: `${catPos.x}%`, top: `${catPos.y - 18}%` }}
@@ -445,7 +514,7 @@ export function CozyRoom() {
           </div>
         )}
 
-        {/* 角色信息条（PC悬停/移动端双击或双指时）—— 跟随猫 */}
+        {/* 角色信息条（PC悬停/移动端双击/双指）—— 跟随猫 */}
         <CharacterInfoBar
           visible={infoBarVisible}
           name={currentCharacter.name}
@@ -456,19 +525,11 @@ export function CozyRoom() {
         />
       </div>
 
-      {/* 底部小提示 */}
-      <p
-        className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur sm:hidden ${
-          uiHidden ? 'ui-hidden' : ''
-        }`}
-      >
+      {/* 底部操作提示 */}
+      <p className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur sm:hidden ${uiHidden ? 'ui-hidden' : ''}`}>
         点击物品探索 · 双击/双指摸{currentCharacter.name}查看状态 · 长按拖动
       </p>
-      <p
-        className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur hidden sm:block ${
-          uiHidden ? 'ui-hidden' : ''
-        }`}
-      >
+      <p className={`ui-fade fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border-2 border-border bg-card/90 px-4 py-1.5 text-center font-cute text-xs text-muted-foreground shadow-md backdrop-blur hidden sm:block ${uiHidden ? 'ui-hidden' : ''}`}>
         点击物品探索 · 悬停{currentCharacter.name}查看状态 · 长按拖动
       </p>
 

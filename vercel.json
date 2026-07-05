@@ -1,0 +1,19 @@
+{
+  "buildCommand": "pnpm --filter @workspace/miao-room run build",
+  "outputDirectory": "artifacts/miao-room/dist",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://YOUR_API_SERVER_URL/api/:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}

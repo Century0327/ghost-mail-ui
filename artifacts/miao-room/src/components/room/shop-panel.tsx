@@ -1,35 +1,57 @@
 
-
 import { useState, useCallback } from 'react'
 import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Move, CircleDollarSign } from 'lucide-react'
 import { SHOP_ITEMS, type ShopItem } from '@/lib/companion-data'
 
 type Tab = 'warehouse' | 'shop'
 
-// 仓库物品类型
 export type InventoryItem = ShopItem & {
-  id: string
-  name: string
-  desc: string
-  price: number
-  emojiColor: string
-  position?: { x: number; y: number } // 在房间的位置（百分比）
-  rotation?: number // 旋转角度
-  hidden?: boolean // 是否隐藏
-  preview?: boolean // 是否在预览中
+  position?: { x: number; y: number }
+  rotation?: number
+  hidden?: boolean
+  preview?: boolean
 }
 
-// 底部抽屉式物品栏
+// 物品图标：优先使用图片，否则退回色块
+function ItemIcon({
+  item,
+  size = 'md',
+  style,
+}: {
+  item: ShopItem
+  size?: 'sm' | 'md'
+  style?: React.CSSProperties
+}) {
+  const dim = size === 'sm' ? 'h-12 w-12' : 'h-16 w-16'
+  const inner = size === 'sm' ? 'size-8' : 'size-10'
+
+  return (
+    <div
+      className={`${dim} flex items-center justify-center rounded-xl overflow-hidden`}
+      style={{ backgroundColor: item.emojiColor + '33', ...style }}
+    >
+      {item.image ? (
+        <img
+          src={item.image}
+          alt={item.name}
+          className={`pixelated ${inner} object-contain`}
+        />
+      ) : (
+        <span className={`${inner} rounded-xl border-2 border-border/60`} style={{ backgroundColor: item.emojiColor }} />
+      )}
+    </div>
+  )
+}
+
 export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [currentTab, setCurrentTab] = useState<Tab>('warehouse')
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [previewItem, setPreviewItem] = useState<InventoryItem | null>(null)
 
-  // 购买物品
   const handleBuy = useCallback((item: ShopItem) => {
     const newItem: InventoryItem = {
       ...item,
-      position: { x: 50, y: 50 }, // 默认在房间中心
+      position: { x: 50, y: 50 },
       rotation: 0,
       hidden: false,
       preview: false,
@@ -38,45 +60,21 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
     setPreviewItem(null)
   }, [])
 
-  // 开始预览（点击商店物品）
   const handlePreview = useCallback((item: ShopItem) => {
-    const previewInventory: InventoryItem = {
-      ...item,
-      position: { x: 50, y: 50 },
-      rotation: 0,
-      hidden: false,
-      preview: true,
-    }
-    setPreviewItem(previewInventory)
+    setPreviewItem({ ...item, position: { x: 50, y: 50 }, rotation: 0, hidden: false, preview: true })
   }, [])
 
-  // 取消预览
-  const cancelPreview = useCallback(() => {
-    setPreviewItem(null)
-  }, [])
+  const cancelPreview = useCallback(() => setPreviewItem(null), [])
 
-  // 放置物品到房间
-  const handlePlace = useCallback((item: InventoryItem) => {
-    setInventory((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, hidden: false } : i))
-    )
-  }, [])
-
-  // 旋转物品
   const handleRotate = useCallback((item: InventoryItem) => {
     setInventory((prev) =>
-      prev.map((i) =>
-        i.id === item.id ? { ...i, rotation: ((i.rotation || 0) + 90) % 360 } : i
-      )
+      prev.map((i) => (i.id === item.id ? { ...i, rotation: ((i.rotation || 0) + 90) % 360 } : i))
     )
   }, [])
 
-  // 切换物品显示/隐藏
   const handleToggleVisibility = useCallback((item: InventoryItem) => {
     setInventory((prev) =>
-      prev.map((i) =>
-        i.id === item.id ? { ...i, hidden: !i.hidden } : i
-      )
+      prev.map((i) => (i.id === item.id ? { ...i, hidden: !i.hidden } : i))
     )
   }, [])
 
@@ -88,14 +86,14 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
       onClick={onClose}
     >
       <div
-        className="max-h-[70dvh] w-full rounded-t-3xl border border-border bg-card shadow-2xl animate-in slide-in-from-bottom duration-300"
+        className="max-h-[72dvh] w-full rounded-t-3xl border border-border bg-card shadow-2xl animate-in slide-in-from-bottom duration-300 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 标签切换栏 */}
-        <div className="flex border-b border-border">
+        {/* 标签切换栏 + 关闭按钮 */}
+        <div className="flex items-center border-b border-border shrink-0">
           <button
             onClick={() => setCurrentTab('warehouse')}
-            className={`flex flex-1 items-center justify-center gap-2 px-4 py-3 font-cute text-base transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-2 px-4 py-3.5 font-cute text-base transition-colors ${
               currentTab === 'warehouse'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-muted-foreground hover:text-foreground'
@@ -104,12 +102,12 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
             <Package className="size-5" />
             仓库
             {inventory.length > 0 && (
-              <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs">{inventory.length}</span>
+              <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-primary">{inventory.length}</span>
             )}
           </button>
           <button
-            onClick={() => setCurrentTab('shop')}
-            className={`flex flex-1 items-center justify-center gap-2 px-4 py-3 font-cute text-base transition-colors ${
+            onClick={() => { setPreviewItem(null); setCurrentTab('shop') }}
+            className={`flex flex-1 items-center justify-center gap-2 px-4 py-3.5 font-cute text-base transition-colors ${
               currentTab === 'shop'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-muted-foreground hover:text-foreground'
@@ -118,12 +116,18 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
             <ShoppingBag className="size-5" />
             商店
           </button>
+          <button
+            onClick={onClose}
+            className="mr-3 flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-secondary"
+            aria-label="关闭"
+          >
+            <X className="size-4 text-muted-foreground" />
+          </button>
         </div>
 
         {/* 内容区域 - 横向滑动 */}
-        <div className="overflow-x-auto px-4 py-4 scrollbar-hide">
+        <div className="overflow-x-auto px-4 py-4 scrollbar-hide flex-1">
           {currentTab === 'warehouse' ? (
-            // 仓库视图
             inventory.length === 0 ? (
               <div className="flex min-h-32 flex-col items-center justify-center py-8 text-center">
                 <span className="mb-3 flex size-14 items-center justify-center rounded-full bg-secondary/50">
@@ -141,34 +145,11 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
                       item.hidden ? 'border-dashed border-border/50 bg-secondary/30' : 'border-border bg-background/60'
                     }`}
                   >
-                    {/* 物品图标 */}
-                    <div
-                      className="mb-2 flex h-16 w-16 items-center justify-center rounded-xl"
-                      style={{
-                        backgroundColor: item.emojiColor + '55',
-                        transform: `rotate(${item.rotation || 0}deg)`,
-                        opacity: item.hidden ? 0.4 : 1,
-                      }}
-                    >
-                      <span
-                        className="size-10 rounded-xl border-2 border-border/60"
-                        style={{ backgroundColor: item.emojiColor }}
-                        aria-hidden="true"
-                      />
+                    <div style={{ transform: `rotate(${item.rotation || 0}deg)`, opacity: item.hidden ? 0.4 : 1, transition: 'transform 0.3s' }}>
+                      <ItemIcon item={item} size="sm" />
                     </div>
-
-                    {/* 物品名称 */}
-                    <p className="font-cute text-center text-xs text-foreground line-clamp-1">{item.name}</p>
-
-                    {/* 操作按钮 */}
+                    <p className="mt-2 font-cute text-center text-xs text-foreground line-clamp-1">{item.name}</p>
                     <div className="mt-2 flex gap-1">
-                      <button
-                        onClick={() => handlePlace(item)}
-                        title="放置"
-                        className="flex size-7 items-center justify-center rounded-lg bg-primary/10 transition hover:bg-primary/20"
-                      >
-                        <Move className="size-3.5 text-primary" />
-                      </button>
                       <button
                         onClick={() => handleRotate(item)}
                         title="旋转"
@@ -181,11 +162,13 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
                         title={item.hidden ? '显示' : '隐藏'}
                         className="flex size-7 items-center justify-center rounded-lg bg-secondary/50 transition hover:bg-secondary"
                       >
-                        {item.hidden ? (
-                          <Eye className="size-3.5 text-muted-foreground" />
-                        ) : (
-                          <EyeOff className="size-3.5 text-muted-foreground" />
-                        )}
+                        {item.hidden ? <Eye className="size-3.5 text-muted-foreground" /> : <EyeOff className="size-3.5 text-muted-foreground" />}
+                      </button>
+                      <button
+                        title="放置"
+                        className="flex size-7 items-center justify-center rounded-lg bg-primary/10 transition hover:bg-primary/20"
+                      >
+                        <Move className="size-3.5 text-primary" />
                       </button>
                     </div>
                   </div>
@@ -193,7 +176,6 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
               </div>
             )
           ) : (
-            // 商店视图
             <div className="flex gap-3 pb-2">
               {SHOP_ITEMS.map((item) => {
                 const owned = inventory.some((i) => i.id === item.id)
@@ -202,28 +184,15 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
                   <div
                     key={item.id}
                     className={`flex w-32 shrink-0 flex-col items-center rounded-2xl border-2 bg-background/60 p-3 transition-all ${
-                      owned ? 'opacity-60' : isPreviewing ? 'border-primary' : 'border-border'
+                      owned ? 'opacity-60' : isPreviewing ? 'border-primary shadow-md' : 'border-border hover:border-primary/40 hover:shadow-sm'
                     }`}
                   >
-                    {/* 物品图标 */}
-                    <div
-                      className="mb-2 flex h-16 w-16 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: item.emojiColor + '55' }}
-                    >
-                      <span
-                        className="size-10 rounded-xl border-2 border-border/60"
-                        style={{ backgroundColor: item.emojiColor }}
-                        aria-hidden="true"
-                      />
-                    </div>
-
-                    {/* 物品名称和描述 */}
-                    <p className="font-cute text-center text-xs text-foreground line-clamp-1">{item.name}</p>
+                    <ItemIcon item={item} />
+                    <p className="mt-2 font-cute text-center text-xs text-foreground line-clamp-1">{item.name}</p>
                     <p className="mt-0.5 line-clamp-2 text-center text-[10px] text-muted-foreground">{item.desc}</p>
 
-                    {/* 购买/预览按钮 */}
                     {owned ? (
-                      <div className="mt-2 flex items-center gap-1 text-accent">
+                      <div className="mt-2 flex items-center gap-1 text-primary">
                         <Check className="size-3" />
                         <span className="text-xs">已获得</span>
                       </div>
@@ -259,7 +228,7 @@ export function ShopPanel({ open, onClose }: { open: boolean; onClose: () => voi
 
         {/* 预览提示 */}
         {previewItem && currentTab === 'shop' && (
-          <div className="border-t border-border bg-secondary/30 px-4 py-2 text-center text-xs text-muted-foreground">
+          <div className="border-t border-border bg-secondary/30 px-4 py-2 text-center text-xs text-muted-foreground shrink-0">
             预览中：{previewItem.name} · 点击购买或取消
           </div>
         )}

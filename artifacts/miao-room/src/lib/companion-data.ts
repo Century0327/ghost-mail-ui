@@ -111,14 +111,15 @@ export type ShopItem = {
   desc: string
   price: number
   emojiColor: string
+  image?: string // 可选像素图片路径
 }
 
 export const SHOP_ITEMS: ShopItem[] = [
-  { id: 's1', name: '小鱼干零食', desc: '猫咪最爱的香脆小鱼干，元气满满。', price: 12, emojiColor: '#e8a87c' },
-  { id: 's2', name: '毛线球玩具', desc: '软软的毛线球，可以陪它玩一下午。', price: 18, emojiColor: '#d98ea0' },
-  { id: 's3', name: '暖阳软垫', desc: '放在窗台的柔软坐垫，晒太阳专用。', price: 45, emojiColor: '#e6c88a' },
-  { id: 's4', name: '手写信纸', desc: '给记忆收藏夹添一封新的信。', price: 9, emojiColor: '#c9b79c' },
-  { id: 's5', name: '小盆栽', desc: '给房间添一抹绿意，猫咪也喜欢。', price: 28, emojiColor: '#8fb07a' },
+  { id: 's1', name: '小鱼干零食', desc: '猫咪最爱的香脆小鱼干，元气满满。', price: 12, emojiColor: '#e8a87c', image: '/room/item-fish.png' },
+  { id: 's2', name: '毛线球玩具', desc: '软软的毛线球，可以陪它玩一下午。', price: 18, emojiColor: '#d98ea0', image: '/room/item-yarn.png' },
+  { id: 's3', name: '暖阳软垫', desc: '放在窗台的柔软坐垫，晒太阳专用。', price: 45, emojiColor: '#e6c88a', image: '/room/item-cushion.png' },
+  { id: 's4', name: '手写信纸', desc: '给记忆收藏夹添一封新的信。', price: 9, emojiColor: '#c9b79c', image: '/room/letter.png' },
+  { id: 's5', name: '小盆栽', desc: '给房间添一抹绿意，猫咪也喜欢。', price: 28, emojiColor: '#8fb07a', image: '/room/item-plant.png' },
   { id: 's6', name: '铃铛项圈', desc: '走起路来叮当响的可爱项圈。', price: 22, emojiColor: '#e0b04a' },
 ]
 
