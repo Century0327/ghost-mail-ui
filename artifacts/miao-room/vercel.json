@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/companion/:path*", "destination": "https://random-ai-mail-ghost.vercel.app/api/companion/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
