@@ -1,21 +1,65 @@
-
-
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Mail, ChevronLeft, Heart, Star, Calendar, Image, ZoomIn } from 'lucide-react'
 import { Panel } from './panel'
-import { LETTERS, type Letter, type LetterCategory } from '@/lib/companion-data'
+import { companionApi } from '@/lib/companion-api'
+import { companionLocal } from '@/lib/companion-local'
 
-// 信件标签页配置
+type LetterCategory = 'all' | 'favorite' | 'event'
+
+interface DisplayLetter {
+  id: string
+  title: string
+  date: string
+  preview: string
+  body: string
+  image?: string
+  category: LetterCategory
+}
+
 const TABS: { key: LetterCategory; label: string; icon: typeof Mail }[] = [
   { key: 'all', label: '全部', icon: Mail },
   { key: 'favorite', label: '收藏', icon: Heart },
   { key: 'event', label: '活动', icon: Calendar },
 ]
 
-export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [active, setActive] = useState<Letter | null>(null)
+export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open: boolean; onClose: () => void; characterId?: string }) {
+  const [active, setActive] = useState<DisplayLetter | null>(null)
   const [currentTab, setCurrentTab] = useState<LetterCategory>('all')
   const [zoomed, setZoomed] = useState(false)
+  const [letters, setLetters] = useState<DisplayLetter[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    loadLetters()
+  }, [open, characterId])
+
+  const loadLetters = async () => {
+    setLoading(true)
+    try {
+      const result = await companionApi.getLetters(characterId)
+      const mapped = result.letters.map((l) => ({
+        id: l.id,
+        title: l.subject || '无标题',
+        date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+        preview: l.body?.slice(0, 30) + (l.body?.length > 30 ? '...' : '') || '',
+        body: l.body || '',
+        image: l.attachmentUrl,
+        category: (l.isFavorite ? 'favorite' : 'all') as LetterCategory,
+      }))
+      setLetters(mapped)
+    } catch (err) {
+      console.error('Failed to load letters:', err)
+      setLetters([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleFavorite = async (letterId: string) => {
+    companionLocal.toggleFavorite(letterId)
+    await loadLetters()
+  }
 
   const handleClose = () => {
     setActive(null)
@@ -23,15 +67,13 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
     onClose()
   }
 
-  // 根据标签筛选信件
-  const filteredLetters = LETTERS.filter((l) =>
+  const filteredLetters = letters.filter((l) =>
     currentTab === 'all' ? true : l.category === currentTab
   )
 
   return (
     <Panel open={open} onClose={handleClose} title="记忆信箱" icon={<Mail className="size-5" />}>
       {active ? (
-        // 信件详情视图 - 信纸样式
         <div className="animate-bubble-in">
           <button
             onClick={() => {
@@ -46,36 +88,28 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
             <ChevronLeft className="size-4" /> {zoomed ? '返回信件' : '返回'}
           </button>
 
-          {/* 信纸样式容器 */}
           <div className="relative overflow-hidden rounded-2xl border-2 border-border bg-muted p-5 shadow-lg sm:p-6"
             style={{
               backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 27px, color-mix(in oklch, var(--border) 40%, transparent) 27px, color-mix(in oklch, var(--border) 40%, transparent) 28px)`,
             }}
           >
-            {/* 装饰边角 */}
             <div className="absolute left-0 top-0 size-8 border-l-2 border-t-2 border-primary/30" />
             <div className="absolute right-0 top-0 size-8 border-r-2 border-t-2 border-primary/30" />
             <div className="absolute bottom-0 left-0 size-8 border-b-2 border-l-2 border-primary/30" />
             <div className="absolute bottom-0 right-0 size-8 border-b-2 border-r-2 border-primary/30" />
 
-            {/* 信件头部 */}
             <p className="font-cute text-right text-xs text-muted-foreground">{active.date}</p>
             <h3 className="font-cute mt-2 text-center text-xl text-foreground">{active.title}</h3>
 
-            {/* 信件图片（如果有） */}
             {active.image && (
               <div
-                className={`my-4 overflow-hidden rounded-xl border border-border/50 ${
-                  zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
-                }`}
+                className={`my-4 overflow-hidden rounded-xl border border-border/50 ${zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
                 onClick={() => setZoomed(!zoomed)}
               >
                 <img
                   src={active.image}
                   alt={active.title}
-                  className={`w-full object-contain transition-transform duration-300 ${
-                    zoomed ? 'scale-150' : ''
-                  }`}
+                  className={`w-full object-contain transition-transform duration-300 ${zoomed ? 'scale-150' : ''}`}
                   style={{ maxHeight: zoomed ? '50vh' : '30vh' }}
                 />
                 {!zoomed && (
@@ -86,17 +120,13 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             )}
 
-            {/* 信件正文 */}
             <p className="mt-4 text-sm leading-8 text-foreground/85 sm:text-base">
               {active.body}
             </p>
 
-            {/* 收藏按钮 */}
             <div className="mt-6 flex items-center justify-center gap-2 border-t border-dashed border-border pt-4">
               <button
-                onClick={() => {
-                  // TODO: 切换收藏状态
-                }}
+                onClick={() => toggleFavorite(active.id)}
                 className={`flex items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-colors ${
                   active.category === 'favorite'
                     ? 'bg-primary text-primary-foreground'
@@ -121,11 +151,9 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
           </div>
         </div>
       ) : (
-        // 信件列表视图
         <div className="flex flex-col gap-3">
           <p className="font-cute text-sm text-muted-foreground">我把和你相处的点滴都写进了信里～</p>
 
-          {/* 标签切换 */}
           <div className="flex gap-1 rounded-full bg-secondary/30 p-1">
             {TABS.map((tab) => {
               const Icon = tab.icon
@@ -139,19 +167,21 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <Icon
-                    className={`size-4 ${
-                      tab.key === 'favorite' && currentTab === tab.key ? 'fill-current' : ''
-                    }`}
-                  />
+                  <Icon className={`size-4 ${tab.key === 'favorite' && currentTab === tab.key ? 'fill-current' : ''}`} />
                   {tab.label}
                 </button>
               )
             })}
           </div>
 
-          {/* 筛选后的信件列表 */}
-          {filteredLetters.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <span className="mb-3 flex size-16 items-center justify-center rounded-full bg-secondary/50">
+                <Mail className="size-8 text-muted-foreground animate-pulse" />
+              </span>
+              <p className="font-cute text-muted-foreground">正在加载信件...</p>
+            </div>
+          ) : filteredLetters.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <span className="mb-3 flex size-16 items-center justify-center rounded-full bg-secondary/50">
                 <Mail className="size-8 text-muted-foreground" />
@@ -166,14 +196,9 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
                   onClick={() => setActive(letter)}
                   className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-muted/60 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted hover:shadow-md sm:p-4"
                 >
-                  {/* 信件图标或预览图 */}
                   {letter.image ? (
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/30 sm:h-14 sm:w-14">
-                      <img
-                        src={letter.image}
-                        alt=""
-                        className="pixelated size-full object-cover"
-                      />
+                      <img src={letter.image} alt="" className="pixelated size-full object-cover" />
                     </div>
                   ) : (
                     <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-secondary/50 sm:size-14">
@@ -181,7 +206,6 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
                     </span>
                   )}
 
-                  {/* 信件内容 */}
                   <span className="min-w-0 flex-1 py-0.5">
                     <span className="flex items-center gap-1.5">
                       <span className="font-cute text-base text-foreground sm:text-lg">{letter.title}</span>
