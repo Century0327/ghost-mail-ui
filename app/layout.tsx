@@ -1,32 +1,42 @@
 import { Analytics } from '@vercel/analytics/next'
-import type { Metadata } from 'next'
-import { GeistSans } from 'geist/font/sans'
+import type { Metadata, Viewport } from 'next'
 import { GeistMono } from 'geist/font/mono'
 import { GeistPixelSquare } from 'geist/font/pixel'
+import { ZCOOL_KuaiLe, Noto_Sans_SC } from 'next/font/google'
 import './globals.css'
 
+const cuteFont = ZCOOL_KuaiLe({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-cute',
+  display: 'swap',
+})
+
+const bodyFont = Noto_Sans_SC({
+  subsets: ['latin'],
+  variable: '--font-body',
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
-  title: 'v0 Shopify Game Template',
-  description:
-    'A pixel isometric fashion district where every shop is a Shopify collection. Walk, step inside, and shop.',
+  title: '喵屋 · 我的治愈小房间',
+  description: '一只像素风的小猫，住在温暖的房间里陪着你。点击房间里的物品，查看记忆、日程与小店。',
   generator: 'v0.app',
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
       {
         url: '/icon.svg',
         type: 'image/svg+xml',
       },
     ],
-    apple: '/apple-icon.png',
   },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#efe2d2',
+  userScalable: false,
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({
@@ -36,13 +46,9 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${GeistPixelSquare.variable} bg-background`}
+      lang="zh-CN"
+      className={`${bodyFont.variable} ${cuteFont.variable} ${GeistMono.variable} ${GeistPixelSquare.variable} bg-background`}
     >
-      <head>
-        {/* Product photos come from the Shopify CDN; connect early. */}
-        <link rel="preconnect" href="https://cdn.shopify.com" crossOrigin="anonymous" />
-      </head>
       <body className="font-sans antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
