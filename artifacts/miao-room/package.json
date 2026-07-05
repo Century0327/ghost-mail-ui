@@ -77,5 +77,11 @@
     "@liveblocks/client": "^3.21.0",
     "@liveblocks/react": "^3.21.0",
     "ai": "^7.0.15"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
