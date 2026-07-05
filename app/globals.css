@@ -5,9 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-geist-pixel-square);
+  --font-heading: var(--font-cute), 'ZCOOL KuaiLe Fallback';
+  --font-cute: var(--font-cute), 'ZCOOL KuaiLe Fallback';
   --font-pixel: var(--font-geist-pixel-square);
-  --font-sans: var(--font-geist-sans), 'Geist Fallback';
+  --font-sans: var(--font-body), 'Noto Sans SC Fallback';
   --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -50,38 +51,39 @@
 }
 
 :root {
-  --background: oklch(0.19 0.025 264);
-  --foreground: oklch(0.96 0.01 90);
-  --card: oklch(0.24 0.03 264);
-  --card-foreground: oklch(0.96 0.01 90);
-  --popover: oklch(0.22 0.03 264);
-  --popover-foreground: oklch(0.96 0.01 90);
-  --primary: oklch(0.82 0.16 75);
-  --primary-foreground: oklch(0.22 0.04 70);
-  --secondary: oklch(0.3 0.03 264);
-  --secondary-foreground: oklch(0.96 0.01 90);
-  --muted: oklch(0.3 0.03 264);
-  --muted-foreground: oklch(0.72 0.02 264);
-  --accent: oklch(0.72 0.15 150);
-  --accent-foreground: oklch(0.2 0.04 150);
-  --destructive: oklch(0.62 0.22 25);
-  --border: oklch(0.36 0.03 264);
-  --input: oklch(0.3 0.03 264);
-  --ring: oklch(0.82 0.16 75);
-  --chart-1: oklch(0.82 0.16 75);
-  --chart-2: oklch(0.72 0.15 150);
-  --chart-3: oklch(0.65 0.15 230);
-  --chart-4: oklch(0.68 0.18 20);
-  --chart-5: oklch(0.7 0.16 320);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.22 0.03 264);
-  --sidebar-foreground: oklch(0.96 0.01 90);
-  --sidebar-primary: oklch(0.82 0.16 75);
-  --sidebar-primary-foreground: oklch(0.22 0.04 70);
-  --sidebar-accent: oklch(0.3 0.03 264);
-  --sidebar-accent-foreground: oklch(0.96 0.01 90);
-  --sidebar-border: oklch(0.36 0.03 264);
-  --sidebar-ring: oklch(0.82 0.16 75);
+  /* 温暖治愈系配色：米色、暖棕、柔粉、奶白 */
+  --background: oklch(0.91 0.028 75);
+  --foreground: oklch(0.36 0.045 55);
+  --card: oklch(0.98 0.012 85);
+  --card-foreground: oklch(0.36 0.045 55);
+  --popover: oklch(0.98 0.012 85);
+  --popover-foreground: oklch(0.36 0.045 55);
+  --primary: oklch(0.66 0.09 45);
+  --primary-foreground: oklch(0.98 0.012 85);
+  --secondary: oklch(0.9 0.045 25);
+  --secondary-foreground: oklch(0.42 0.07 30);
+  --muted: oklch(0.93 0.022 80);
+  --muted-foreground: oklch(0.56 0.035 60);
+  --accent: oklch(0.86 0.06 20);
+  --accent-foreground: oklch(0.42 0.08 25);
+  --destructive: oklch(0.62 0.19 25);
+  --border: oklch(0.85 0.03 70);
+  --input: oklch(0.88 0.028 72);
+  --ring: oklch(0.7 0.09 45);
+  --chart-1: oklch(0.7 0.1 45);
+  --chart-2: oklch(0.78 0.09 20);
+  --chart-3: oklch(0.75 0.09 130);
+  --chart-4: oklch(0.8 0.1 85);
+  --chart-5: oklch(0.68 0.08 330);
+  --radius: 1rem;
+  --sidebar: oklch(0.96 0.015 82);
+  --sidebar-foreground: oklch(0.36 0.045 55);
+  --sidebar-primary: oklch(0.66 0.09 45);
+  --sidebar-primary-foreground: oklch(0.98 0.012 85);
+  --sidebar-accent: oklch(0.9 0.045 25);
+  --sidebar-accent-foreground: oklch(0.42 0.07 30);
+  --sidebar-border: oklch(0.85 0.03 70);
+  --sidebar-ring: oklch(0.7 0.09 45);
 }
 
 .dark {
@@ -133,6 +135,82 @@
 @layer utilities {
   .font-pixel {
     font-family: var(--font-geist-pixel-square), monospace;
+  }
+  .font-cute {
+    font-family: var(--font-cute), 'ZCOOL KuaiLe Fallback', sans-serif;
+  }
+
+  /* 气泡出现：轻轻弹入 */
+  .animate-bubble-in {
+    animation: bubble-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes bubble-in {
+    0% {
+      transform: scale(0.7) translateY(6px);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* 想法气泡上下轻轻浮动 */
+  .animate-float {
+    animation: float 3.5s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+
+  /* 猫呼吸般的轻微缩放 */
+  .animate-breathe {
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.03);
+    }
+  }
+
+  /* 物品被提示时轻轻晃动 */
+  .animate-wiggle {
+    animation: wiggle 2.4s ease-in-out infinite;
+  }
+  @keyframes wiggle {
+    0%,
+    92%,
+    100% {
+      transform: rotate(0deg);
+    }
+    95% {
+      transform: rotate(-4deg);
+    }
+    98% {
+      transform: rotate(4deg);
+    }
+  }
+
+  /* UI 淡入淡出（一键收起） */
+  .ui-fade {
+    transition:
+      opacity 0.5s ease,
+      transform 0.5s ease;
+  }
+  .ui-hidden {
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
   }
   .pixelated {
     image-rendering: pixelated;
