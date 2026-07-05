@@ -47,9 +47,9 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
           </button>
 
           {/* 信纸样式容器 */}
-          <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 p-5 shadow-lg sm:p-6"
+          <div className="relative overflow-hidden rounded-2xl border-2 border-border bg-muted p-5 shadow-lg sm:p-6"
             style={{
-              backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(0,0,0,0.03) 27px, rgba(0,0,0,0.03) 28px)`,
+              backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 27px, color-mix(in oklch, var(--border) 40%, transparent) 27px, color-mix(in oklch, var(--border) 40%, transparent) 28px)`,
             }}
           >
             {/* 装饰边角 */}
@@ -164,7 +164,7 @@ export function MemoriesPanel({ open, onClose }: { open: boolean; onClose: () =>
                 <button
                   key={letter.id}
                   onClick={() => setActive(letter)}
-                  className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-gradient-to-r from-amber-50/50 to-orange-50/50 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md sm:p-4"
+                  className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-muted/60 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted hover:shadow-md sm:p-4"
                 >
                   {/* 信件图标或预览图 */}
                   {letter.image ? (

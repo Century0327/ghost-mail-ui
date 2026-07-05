@@ -429,7 +429,7 @@ export function CozyRoom() {
             left: `${catPos.x}%`,
             top: `${catPos.y}%`,
             transform: `translate(-50%, -50%) translateY(${catLift}%)`,
-            transition: isMoving ? 'left 0.52s ease-in-out, top 0.52s ease-in-out' : isDragging ? 'none' : 'transform 0.3s ease',
+            transition: (isMoving || catAnim === 'walk') ? 'left 0.9s ease-in-out, top 0.9s ease-in-out' : isDragging ? 'none' : 'transform 0.3s ease',
             zIndex: catZIndex,
           }}
         >
@@ -443,9 +443,9 @@ export function CozyRoom() {
               transition: 'transform 0.15s ease',
             }}
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${
-              isMoving || catAnim === 'walk' ? 'animate-bounce' :
               catAnim === 'jump' ? 'animate-cat-jump' :
-              isDragging ? 'scale-105' : 'animate-breathe'
+              isDragging ? 'scale-105' :
+              isMoving ? 'animate-bounce' : 'animate-breathe'
             }`}
             draggable={false}
           />
