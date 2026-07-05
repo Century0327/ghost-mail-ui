@@ -37,18 +37,20 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
   const loadLetters = async () => {
     setLoading(true)
     try {
+      // 先读 localStorage 的收藏状态
+      const localLetters = companionLocal.getLetters(characterId)
+      const favMap = new Map<string, boolean>()
+      localLetters.forEach((l) => favMap.set(l.id, !!l.isFavorite))
+      
       // 从后端 API 获取信件
       const result = await companionApi.getLetters(characterId)
-      // 从 localStorage 获取收藏状态
-      const localLetters = companionLocal.getLetters(characterId)
-      const localFavIds = new Set(localLetters.filter((l) => l.isFavorite).map((l) => l.id))
       
       const mapped = result.letters.map((l) => {
-        // 优先使用后端返回的 category，如果没有则根据 isFavorite 判断
+        // 判断 category：event > favorite > all
         let category: LetterCategory = 'all'
-        if (l.category === 'event') {
+        if (l.source === 'event' || l.category === 'event') {
           category = 'event'
-        } else if (l.isFavorite || localFavIds.has(l.id)) {
+        } else if (favMap.get(l.id)) {
           category = 'favorite'
         }
         
@@ -192,7 +194,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
               return (
                 <button
                   key={tab.key}
-                  onClick={() => setCurrentTab(tab.key)}
+                  onClick={() => { setActive(null); setCurrentTab(tab.key); }}
                   className={`flex flex-1 items-center justify-center gap-1 rounded-full py-2 font-cute text-sm transition-colors ${
                     currentTab === tab.key
                       ? 'bg-card text-foreground shadow-sm'
