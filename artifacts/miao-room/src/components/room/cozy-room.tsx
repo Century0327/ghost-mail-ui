@@ -141,7 +141,7 @@ export function CozyRoom() {
 
   // 从后端加载角色数据
   useEffect(() => {
-    companionApi.getCharacterStatus('maodie').then(data => {
+    companionApi.getCharacterStatus(currentCharacter.id).then(data => {
       if (data.userState) {
         // 可以在这里同步状态
         console.log('角色状态:', data.userState)
