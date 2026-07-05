@@ -48,7 +48,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
       const mapped = result.letters.map((l) => {
         // 判断 category：event > favorite > all
         let category: LetterCategory = 'all'
-        if (l.source === 'event' || l.category === 'event') {
+        if (l.source === 'event' || (l as any).category === 'event') {
           category = 'event'
         } else if (favMap.get(l.id)) {
           category = 'favorite'

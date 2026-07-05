@@ -207,6 +207,52 @@ export const companionApi = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+
+  // 获取日程列表
+  getSchedules: async (characterId?: string): Promise<{ schedules: any[] }> => {
+    try {
+      const query = characterId ? `?character_id=${characterId}` : ''
+      const result = await apiFetch(`/api/companion/schedules${query}`)
+      return { schedules: result.schedules || [] }
+    } catch {
+      return { schedules: companionLocal.getTodaySchedule(characterId || 'maodie') }
+    }
+  },
+
+  // 刷新今日日程（调用AI生成）
+  refreshSchedule: async (characterId: string) => {
+    const lastSchedule = companionLocal.getLastSchedule(characterId)
+    const history = companionLocal.getScheduleHistory(characterId)
+    
+    try {
+      const result = await apiFetch('/api/companion/generate-schedule', {
+        method: 'POST',
+        body: JSON.stringify({
+          character_id: characterId,
+          last_schedule: lastSchedule?.items || [],
+          history_summary: history.currentSummary || '',
+          interact_count: history.totalInteractCount || 0,
+        }),
+      })
+      
+      if (result.schedule && Array.isArray(result.schedule)) {
+        const items = result.schedule.map((s: any) => ({
+          time: s.time,
+          activity: s.activity || s.text || '',
+          location: s.location || '',
+          thought: s.thought || '',
+          text: s.activity || s.text || '',
+          done: false,
+        }))
+        companionLocal.saveTodaySchedule(characterId, items, result.summary || '')
+        return { schedule: items, summary: result.summary }
+      }
+      throw new Error('Invalid schedule format')
+    } catch (err) {
+      console.error('Failed to refresh schedule:', err)
+      throw err
+    }
+  },
 }
 
 export default companionApi

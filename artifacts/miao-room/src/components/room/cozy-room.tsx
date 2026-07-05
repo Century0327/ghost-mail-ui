@@ -9,9 +9,6 @@ import { MemoriesPanel } from './memories-panel'
 import { ShopPanel } from './shop-panel'
 import { SchedulePanel } from './schedule-panel'
 import { SettingsMenu } from './settings-menu'
-import { ShopPanel } from './shop-panel'
-import { SchedulePanel } from './schedule-panel'
-import { SettingsMenu } from './settings-menu'
 import { AlbumPanel } from './album-panel'
 import { CharacterSelector } from './character-selector'
 
@@ -118,6 +115,8 @@ export function CozyRoom() {
   const [platform, setPlatform] = useState<typeof PLATFORMS[0] | null>(null)
   const [catFacing, setCatFacing] = useState<'left' | 'right'>('right')
   const [catAnim, setCatAnim] = useState<'idle' | 'walk' | 'jump'>('idle')
+  const [moveDuration, setMoveDuration] = useState(0.9)
+  const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null)
 
   // 拖动状态
   const [isDragging, setIsDragging] = useState(false)
@@ -187,17 +186,35 @@ export function CozyRoom() {
     return () => clearTimeout(timer)
   }, [])
 
-  // 猫移动到新位置（点击地板）
+  // 猫移动到新位置（点击地板）— 匀速移动，速度固定
+  const MOVE_SPEED = 25 // 每秒移动的百分比距离
   const moveCatTo = useCallback((x: number, y: number) => {
     const plat = getPlatform(x, y)
     setPlatform(plat)
+    const cur = catPosRef.current
+    const dx = x - cur.x
+    const dy = y - cur.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const duration = Math.max(0.3, dist / MOVE_SPEED) // 至少0.3秒，避免太近时闪烁
+    
+    // 先确定朝向，再开始移动
+    const newFacing = dx >= 0 ? 'right' : 'left'
+    if (catFacing !== newFacing) {
+      setCatFacing(newFacing)
+    }
+    
+    setMoveDuration(duration)
     setIsMoving(true)
-    setCatFacing(catPosRef.current.x <= x ? 'right' : 'left')
+    setCatAnim('walk')
     setCatPos({ x, y })
-    setTimeout(() => setIsMoving(false), 550)
-  }, [])
+    
+    setTimeout(() => {
+      setIsMoving(false)
+      setCatAnim('idle')
+    }, duration * 1000)
+  }, [catFacing])
 
-  // 点击房间背景 → 移动猫
+  // 点击房间背景 → 移动猫 + 波纹效果
   const handleRoomClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!roomRef.current || isDragging) return
@@ -207,6 +224,9 @@ export function CozyRoom() {
       const x = ((e.clientX - rect.left) / rect.width) * 100
       const y = ((e.clientY - rect.top) / rect.height) * 100
       if (x >= WALKABLE.xMin && x <= WALKABLE.xMax && y >= WALKABLE.yMin && y <= WALKABLE.yMax) {
+        // 波纹效果
+        setRipple({ x, y, id: Date.now() })
+        setTimeout(() => setRipple(null), 600)
         moveCatTo(x, y)
       }
     },
@@ -234,7 +254,7 @@ export function CozyRoom() {
       setThought(null)
       setInfoBarVisible(true)
       if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
-      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 2000)
     }, 300)
   }, [isDragging, isMoving])
 
@@ -249,7 +269,7 @@ export function CozyRoom() {
       e.preventDefault()
       setInfoBarVisible(true)
       if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
-      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 2000)
       touchCountRef.current = 0
       return
     }
@@ -257,7 +277,7 @@ export function CozyRoom() {
       e.preventDefault()
       setInfoBarVisible(true)
       if (infoBarTimer.current) clearTimeout(infoBarTimer.current)
-      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 4000)
+      infoBarTimer.current = setTimeout(() => setInfoBarVisible(false), 2000)
       touchCountRef.current = 0
     } else {
       touchCountRef.current = 1
@@ -376,11 +396,25 @@ export function CozyRoom() {
         />
         {isNight && <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-[#1a0f05]/25 transition-all duration-700" />}
 
+        {/* 点击波纹效果 */}
+        {ripple && (
+          <span
+            key={ripple.id}
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 animate-ripple rounded-full border-2 border-primary/50"
+            style={{
+              left: `${ripple.x}%`,
+              top: `${ripple.y}%`,
+              width: '20px',
+              height: '20px',
+            }}
+          />
+        )}
+
         {/* ── 透明热区按钮：覆盖在像素画对应物件上 ── */}
 
         {/* 台灯 — 左移 1.5 倍自身宽度(14%×1.5≈21%) 精确贴合像素灯 */}
         <RoomHotspot
-          label={isNight ? '关灯' : '开灯'}
+          label={isNight ? '开灯' : '关灯'}
           onClick={() => setIsNight((v) => !v)}
           style={{ left: '8%', top: '55%' }}
           size="14%"
@@ -436,22 +470,6 @@ export function CozyRoom() {
           size="13%"
           uiHidden={uiHidden}
         />
-        <RoomHotspot
-          label="物品"
-          onClick={() => setPanel('shop')}
-          style={{ left: '83%', top: '73%' }}
-          size="14%"
-          uiHidden={uiHidden}
-        />
-
-        {/* 书架上的便利贴/记事本 (日程) */}
-        <RoomHotspot
-          label="日程"
-          onClick={() => setPanel('schedule')}
-          style={{ left: '77%', top: '30%' }}
-          size="13%"
-          uiHidden={uiHidden}
-        />
 
         {/* 猫咪/角色 */}
         <button
@@ -466,7 +484,7 @@ export function CozyRoom() {
             left: `${catPos.x}%`,
             top: `${catPos.y}%`,
             transform: `translate(-50%, -50%) translateY(${catLift}%)`,
-            transition: (isMoving || catAnim === 'walk') ? 'left 0.9s ease-in-out, top 0.9s ease-in-out' : isDragging ? 'none' : 'transform 0.3s ease',
+            transition: (isMoving || catAnim === 'walk') ? `left ${moveDuration}s linear, top ${moveDuration}s linear` : isDragging ? 'none' : 'transform 0.3s ease',
             zIndex: catZIndex,
           }}
         >
@@ -476,8 +494,9 @@ export function CozyRoom() {
             style={{
               width: '30%',
               minWidth: '130px',
-              transform: `scaleX(${catFacing === 'left' ? -1 : 1})`,
+              transform: `scaleX(${catFacing === 'left' ? -1 : 1}) scale(${1 + (catPos.y - 65) * 0.003})`,
               transition: 'transform 0.15s ease',
+              transformOrigin: 'center bottom',
             }}
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${
               catAnim === 'jump' ? 'animate-cat-jump' :
@@ -535,11 +554,7 @@ export function CozyRoom() {
       {/* 功能面板 */}
       <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
       <ShopPanel open={panel === 'shop'} onClose={() => setPanel(null)} />
-      <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} />
-      <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} />
-      <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
-      <ShopPanel open={panel === 'shop'} onClose={() => setPanel(null)} />
-      <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} />
+      <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
       <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} />
       <CharacterSelector
         open={panel === 'character'}
