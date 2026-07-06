@@ -293,32 +293,16 @@ export function CozyRoom() {
     }
   }, [])
 
-  // 获取当前时间点的日程thought
+  // 获取随机日程thought（从所有日程中随机选择）
   const getCurrentScheduleThought = useCallback((): string | null => {
     const schedule = companionLocal.getTodaySchedule(currentCharacter.id)
     if (!schedule || schedule.length === 0) return null
     
-    const now = new Date()
-    const currentMinutes = now.getHours() * 60 + now.getMinutes()
+    // 从所有有thought的日程中随机选择一个
+    const thoughts = schedule.filter(item => item.thought && item.thought.trim())
+    if (thoughts.length === 0) return null
     
-    let currentItem: typeof schedule[0] | null = null
-    let prevItem: typeof schedule[0] | null = null
-    
-    for (const item of schedule) {
-      const [h, m] = item.time.split(':').map(Number)
-      const itemMinutes = h * 60 + m
-      
-      if (itemMinutes <= currentMinutes) {
-        prevItem = item
-      } else {
-        currentItem = item
-        break
-      }
-    }
-    
-    // 如果找到了当前进行中的任务，使用它的thought；否则使用最近已完成的任务的thought
-    const targetItem = currentItem || prevItem
-    return targetItem?.thought || null
+    return thoughts[Math.floor(Math.random() * thoughts.length)].thought || null
   }, [currentCharacter.id])
 
   // 自动冒出想法气泡
