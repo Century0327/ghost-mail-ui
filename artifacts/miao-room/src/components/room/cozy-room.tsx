@@ -150,11 +150,38 @@ export function CozyRoom() {
   useEffect(() => {
     companionApi.getCharacterStatus(currentCharacter.id).then(data => {
       if (data.userState) {
-        // 可以在这里同步状态
         console.log('角色状态:', data.userState)
       }
     }).catch(() => { /* 后端未就绪时用本地数据 */ })
   }, [])
+
+  // 定时从后端刷新日程数据
+  useEffect(() => {
+    const refreshSchedule = async () => {
+      try {
+        const result = await companionApi.getSchedules(currentCharacter.id)
+        const list = Array.isArray(result.schedules) ? result.schedules : []
+        if (list.length > 0) {
+          companionLocal.saveTodaySchedule(
+            currentCharacter.id,
+            list.map((s: any) => ({
+              time: s.time,
+              activity: s.activity || s.text || '',
+              location: s.location || '',
+              thought: s.thought || '',
+              done: !!s.done,
+            })),
+            ''
+          )
+        }
+      } catch {
+        // 后端未就绪时用本地数据
+      }
+    }
+    refreshSchedule()
+    const timer = setInterval(refreshSchedule, 60000)
+    return () => clearInterval(timer)
+  }, [currentCharacter.id])
 
   // 自动夜间模式
   useEffect(() => {
