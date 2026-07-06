@@ -64,7 +64,13 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
       setCurrentTime(getNowTime())
       setDateStr(getDateStr())
     }, 60000)
-    return () => clearInterval(timer)
+    const refreshTimer = setInterval(() => {
+      loadSchedule()
+    }, 30000)
+    return () => {
+      clearInterval(timer)
+      clearInterval(refreshTimer)
+    }
   }, [open, characterId])
 
   const loadSchedule = async () => {
