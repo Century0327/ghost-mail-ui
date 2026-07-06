@@ -28,11 +28,14 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Device-ID': deviceId,
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
     ...((options.headers as Record<string, string>) || {}),
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: 'no-store' })
   if (!res.ok) throw new Error(`API ${res.status}`)
   return res.json()
 }
@@ -212,7 +215,9 @@ export const companionApi = {
   getSchedules: async (characterId?: string): Promise<{ schedules: any[] }> => {
     try {
       const query = characterId ? `?character_id=${characterId}` : ''
+      console.log('[Schedule API] 请求:', `/api/companion/schedules${query}`)
       const result = await apiFetch(`/api/companion/schedules${query}`)
+      console.log('[Schedule API] 原始响应:', result)
       let list: any[] = []
       if (Array.isArray(result.schedules)) {
         list = result.schedules
@@ -224,8 +229,10 @@ export const companionApi = {
           if (keys.length > 0) list = result.schedules[keys[0]]
         }
       }
+      console.log('[Schedule API] 解析后日程数:', list.length)
       return { schedules: list }
-    } catch {
+    } catch (err) {
+      console.error('[Schedule API] 请求失败，使用本地数据:', err)
       return { schedules: companionLocal.getTodaySchedule(characterId || 'maodie') }
     }
   },

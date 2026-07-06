@@ -108,7 +108,7 @@ export function CozyRoom() {
   const [isNight, setIsNight] = useState(false)
 
   const [currentCharacter, setCurrentCharacter] = useState<Character>(OFFICIAL_CHARACTERS[0])
-  const [ownedCharacterIds, setOwnedCharacterIds] = useState<string[]>(['char-kitty'])
+  const [ownedCharacterIds, setOwnedCharacterIds] = useState<string[]>(['kitty'])
 
   // 猫的位置(百分比) & 动画
   const [catPos, setCatPos] = useState({ x: 50, y: 62 })

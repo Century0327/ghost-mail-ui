@@ -87,8 +87,10 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
         })))
       }
       
+      console.log('[Schedule] 正在从后端获取最新日程...')
       const result = await companionApi.getSchedules(characterId)
       const list = Array.isArray(result.schedules) ? result.schedules : []
+      console.log('[Schedule] 后端返回日程数:', list.length)
       if (list.length > 0) {
         const mapped = list.map((s: any) => ({
           time: s.time,
@@ -109,6 +111,9 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
           })),
           ''
         )
+        console.log('[Schedule] 日程已更新:', mapped.map(i => `${i.time} ${i.text}`).join(', '))
+      } else {
+        console.log('[Schedule] 后端返回空日程列表')
       }
     } catch (err) {
       console.error('Failed to load schedule:', err)
@@ -120,8 +125,10 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
+      console.log('[Schedule] 手动刷新，从后端获取最新日程...')
       const result = await companionApi.getSchedules(characterId)
       const list = Array.isArray(result.schedules) ? result.schedules : []
+      console.log('[Schedule] 手动刷新 - 后端返回日程数:', list.length)
       if (list.length > 0) {
         const mapped = list.map((s: any) => ({
           time: s.time,
@@ -142,6 +149,9 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
           })),
           ''
         )
+        console.log('[Schedule] 手动刷新成功:', mapped.map(i => `${i.time} ${i.text}`).join(', '))
+      } else {
+        console.log('[Schedule] 手动刷新 - 后端返回空列表')
       }
     } catch (err) {
       console.error('Failed to refresh schedule:', err)

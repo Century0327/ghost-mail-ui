@@ -161,8 +161,8 @@ export type Character = {
 // 官方角色
 export const OFFICIAL_CHARACTERS: Character[] = [
   {
-    id: 'a7f3c9e2-1d8b-4e5a-9c6f-2b8d4e1a5c73',
-    name: 'kitty',
+    id: 'kitty',
+    name: 'Kitty',
     image: '/room/cat.png',
     bio: '一只活泼可爱的三花猫，好奇心旺盛，喜欢探索房间的每个角落。永远元气满满！',
     personalities: ['p2', 'p6', 'p8'],
@@ -172,7 +172,18 @@ export const OFFICIAL_CHARACTERS: Character[] = [
     isPublic: true,
   },
   {
-    id: 'char-puppy',
+    id: 'maodie',
+    name: '耄聋',
+    image: '/room/cat.png',
+    bio: '一只温柔的老猫，喜欢静静地看着窗外的风景，偶尔会想起过去的岁月。',
+    personalities: ['p5', 'p7', 'p1'],
+    statName: '好感度',
+    statMax: 100,
+    isOfficial: true,
+    isPublic: true,
+  },
+  {
+    id: 'puppy',
     name: '豆豆',
     image: '/room/puppy.png',
     bio: '活泼的小狗，总是充满活力。喜欢玩耍和被摸摸头。',
@@ -183,7 +194,7 @@ export const OFFICIAL_CHARACTERS: Character[] = [
     isPublic: true,
   },
   {
-    id: 'char-foxy',
+    id: 'foxy',
     name: '小狐',
     image: '/room/foxy.png',
     bio: '神秘的小狐狸，外表高冷内心温暖。喜欢安静的夜晚。',
@@ -194,7 +205,7 @@ export const OFFICIAL_CHARACTERS: Character[] = [
     isPublic: true,
   },
   {
-    id: 'char-birb',
+    id: 'birb',
     name: '咕咕',
     image: '/room/birb.png',
     bio: '可爱的小鸟，喜欢唱歌和站在窗口看风景。偶尔会飞到你的肩膀上。',
