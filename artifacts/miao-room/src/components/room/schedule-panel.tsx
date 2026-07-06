@@ -230,7 +230,7 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
                   }`}>
                     {item.text}
                   </p>
-                  {item.thought && (
+                  {item.thought && (isPast || isDone) && (
                     <p className="mt-1 font-pixel text-[10px] text-muted-foreground/60 italic">
                       「{item.thought}」
                     </p>

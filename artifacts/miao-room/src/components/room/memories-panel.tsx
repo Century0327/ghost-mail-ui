@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mail, ChevronLeft, Heart, Star, Calendar, Image, ZoomIn } from 'lucide-react'
 import { Panel } from './panel'
 import { companionApi } from '@/lib/companion-api'
@@ -22,31 +22,40 @@ const TABS: { key: LetterCategory; label: string; icon: typeof Mail }[] = [
   { key: 'event', label: '活动', icon: Calendar },
 ]
 
+const PAGE_SIZE = 5
+
 export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open: boolean; onClose: () => void; characterId?: string }) {
   const [active, setActive] = useState<DisplayLetter | null>(null)
   const [currentTab, setCurrentTab] = useState<LetterCategory>('all')
   const [zoomed, setZoomed] = useState(false)
-  const [letters, setLetters] = useState<DisplayLetter[]>([])
+  const [allLetters, setAllLetters] = useState<DisplayLetter[]>([])
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setDisplayCount(PAGE_SIZE)
+      return
+    }
     loadLetters()
   }, [open, characterId])
+
+  useEffect(() => {
+    setDisplayCount(PAGE_SIZE)
+  }, [currentTab])
 
   const loadLetters = async () => {
     setLoading(true)
     try {
-      // 先读 localStorage 的收藏状态
       const localLetters = companionLocal.getLetters(characterId)
       const favMap = new Map<string, boolean>()
       localLetters.forEach((l) => favMap.set(l.id, !!l.isFavorite))
       
-      // 从后端 API 获取信件
       const result = await companionApi.getLetters(characterId)
       
       const mapped = result.letters.map((l) => {
-        // 判断 category：event > favorite > all
         let category: LetterCategory = 'all'
         if (l.source === 'event' || (l as any).category === 'event') {
           category = 'event'
@@ -64,12 +73,11 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
           category,
         }
       })
-      setLetters(mapped)
+      setAllLetters(mapped)
     } catch (err) {
       console.error('Failed to load letters:', err)
-      // 后端失败时回退到 localStorage
       const localLetters = companionLocal.getLetters(characterId)
-      setLetters(localLetters.map((l) => ({
+      setAllLetters(localLetters.map((l) => ({
         id: l.id,
         title: l.subject || '无标题',
         date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
@@ -83,10 +91,39 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     }
   }
 
+  const loadMore = useCallback(() => {
+    if (loadingMore) return
+    const filtered = allLetters.filter((l) =>
+      currentTab === 'all' ? true : l.category === currentTab
+    )
+    if (displayCount >= filtered.length) return
+    
+    setLoadingMore(true)
+    setTimeout(() => {
+      setDisplayCount((prev) => Math.min(prev + PAGE_SIZE, filtered.length))
+      setLoadingMore(false)
+    }, 300)
+  }, [loadingMore, allLetters, currentTab, displayCount])
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+
+    const handleScroll = () => {
+      if (loadingMore) return
+      const { scrollTop, scrollHeight, clientHeight } = list
+      if (scrollTop + clientHeight >= scrollHeight - 50) {
+        loadMore()
+      }
+    }
+
+    list.addEventListener('scroll', handleScroll)
+    return () => list.removeEventListener('scroll', handleScroll)
+  }, [loadingMore, loadMore])
+
   const toggleFavorite = async (letterId: string) => {
     companionLocal.toggleFavorite(letterId)
-    // 立即更新本地状态，不等待后端刷新
-    setLetters((prev) =>
+    setAllLetters((prev) =>
       prev.map((l) =>
         l.id === letterId
           ? { ...l, category: l.category === 'favorite' ? 'all' : 'favorite' }
@@ -101,9 +138,12 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     onClose()
   }
 
-  const filteredLetters = letters.filter((l) =>
+  const filteredLetters = allLetters.filter((l) =>
     currentTab === 'all' ? true : l.category === currentTab
   )
+
+  const displayedLetters = filteredLetters.slice(0, displayCount)
+  const hasMore = displayCount < filteredLetters.length
 
   return (
     <Panel open={open} onClose={handleClose} title="记忆信箱" icon={<Mail className="size-5" />}>
@@ -223,8 +263,11 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
               <p className="font-cute text-muted-foreground">这里还没有信件~</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {filteredLetters.map((letter) => (
+            <div
+              ref={listRef}
+              className="flex flex-col gap-2 max-h-[40vh] overflow-y-auto pr-2 scrollbar-thin"
+            >
+              {displayedLetters.map((letter) => (
                 <button
                   key={letter.id}
                   onClick={() => setActive(letter)}
@@ -257,6 +300,15 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                   </span>
                 </button>
               ))}
+              {hasMore && (
+                <div className="flex items-center justify-center py-3">
+                  {loadingMore ? (
+                    <Mail className="size-4 text-muted-foreground animate-pulse" />
+                  ) : (
+                    <span className="font-cute text-xs text-muted-foreground">加载更多...</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

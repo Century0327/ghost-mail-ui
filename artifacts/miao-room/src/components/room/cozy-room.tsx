@@ -293,18 +293,48 @@ export function CozyRoom() {
     }
   }, [])
 
+  // 获取当前时间点的日程thought
+  const getCurrentScheduleThought = useCallback((): string | null => {
+    const schedule = companionLocal.getTodaySchedule(currentCharacter.id)
+    if (!schedule || schedule.length === 0) return null
+    
+    const now = new Date()
+    const currentMinutes = now.getHours() * 60 + now.getMinutes()
+    
+    let currentItem: typeof schedule[0] | null = null
+    let prevItem: typeof schedule[0] | null = null
+    
+    for (const item of schedule) {
+      const [h, m] = item.time.split(':').map(Number)
+      const itemMinutes = h * 60 + m
+      
+      if (itemMinutes <= currentMinutes) {
+        prevItem = item
+      } else {
+        currentItem = item
+        break
+      }
+    }
+    
+    // 如果找到了当前进行中的任务，使用它的thought；否则使用最近已完成的任务的thought
+    const targetItem = currentItem || prevItem
+    return targetItem?.thought || null
+  }, [currentCharacter.id])
+
   // 自动冒出想法气泡
   useEffect(() => {
     if (uiHidden || infoBarVisible) { setThought(null); return }
     let hideTimer: ReturnType<typeof setTimeout>
     const show = () => {
-      setThought((prev) => (speech || infoBarVisible) ? prev : CAT_THOUGHTS[Math.floor(Math.random() * CAT_THOUGHTS.length)])
+      const scheduleThought = getCurrentScheduleThought()
+      const text = scheduleThought || CAT_THOUGHTS[Math.floor(Math.random() * CAT_THOUGHTS.length)]
+      setThought((prev) => (speech || infoBarVisible) ? prev : text)
       hideTimer = setTimeout(() => setThought(null), 5200)
     }
     const first = setTimeout(show, 1800)
     const loop = setInterval(show, 9000)
     return () => { clearTimeout(first); clearTimeout(hideTimer); clearInterval(loop) }
-  }, [uiHidden, speech, infoBarVisible])
+  }, [uiHidden, speech, infoBarVisible, getCurrentScheduleThought])
 
   useEffect(() => {
     return () => {
