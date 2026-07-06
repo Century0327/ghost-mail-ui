@@ -120,15 +120,28 @@ export function SchedulePanel({ open, onClose, characterId = 'maodie' }: { open:
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      const result = await companionApi.refreshSchedule(characterId)
-      if (result.schedule) {
-        setSchedule(result.schedule.map((s: ScheduleItem) => ({
+      const result = await companionApi.getSchedules(characterId)
+      const list = Array.isArray(result.schedules) ? result.schedules : []
+      if (list.length > 0) {
+        const mapped = list.map((s: any) => ({
           time: s.time,
-          text: s.activity || '',
+          text: s.activity || s.text || '',
           location: s.location,
           thought: s.thought,
           done: !!s.done,
-        })))
+        }))
+        setSchedule(mapped)
+        companionLocal.saveTodaySchedule(
+          characterId,
+          list.map((s: any) => ({
+            time: s.time,
+            activity: s.activity || s.text || '',
+            location: s.location || '',
+            thought: s.thought || '',
+            done: !!s.done,
+          })),
+          ''
+        )
       }
     } catch (err) {
       console.error('Failed to refresh schedule:', err)
