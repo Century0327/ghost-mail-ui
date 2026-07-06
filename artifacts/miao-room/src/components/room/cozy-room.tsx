@@ -548,7 +548,7 @@ export function CozyRoom() {
             style={{
               width: '30%',
               minWidth: '130px',
-              transform: `scaleX(${catFacing === 'left' ? -1 : 1}) scale(${1 + (catPos.y - 65) * 0.003})`,
+              transform: `scaleX(${catFacing === 'left' ? -1 : 1})`,
               transition: 'transform 0.15s ease',
               transformOrigin: 'center bottom',
             }}
