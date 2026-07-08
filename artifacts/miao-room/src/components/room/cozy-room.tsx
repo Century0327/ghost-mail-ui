@@ -633,14 +633,14 @@ export function CozyRoom() {
       </p>
 
       {/* 功能面板 */}
-      <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} />
+      <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
       <ShopPanel
         open={panel === 'shop'}
         onClose={() => { setPanel(null); setCoins(companionLocal.getCoins?.() || 100); }}
         onPreviewChange={setPreviewItems}
       />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
-      <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} />
+      <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
       <CharacterSelector
         open={panel === 'character'}
         onClose={() => setPanel(null)}

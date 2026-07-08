@@ -1,54 +1,46 @@
-
-
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Image, X, Heart, ZoomIn, ChevronLeft } from 'lucide-react'
 import { Panel } from './panel'
+import { companionApi } from '@/lib/companion-api'
 
-// 相册图片数据类型
 export type AlbumImage = {
   id: string
   src: string
   title: string
   date: string
-  fromLetter?: string // 来源信件ID
+  fromLetter?: string
 }
 
-// 演示用的相册图片数据
-const DEMO_IMAGES: AlbumImage[] = [
-  {
-    id: 'a1',
-    src: '/room/item-fish.png',
-    title: '小鱼干的记忆',
-    date: '春天 · 第 5 天',
-    fromLetter: 'l1',
-  },
-  {
-    id: 'a2',
-    src: '/room/item-yarn.png',
-    title: '毛线球的午后',
-    date: '夏天 · 第 40 天',
-    fromLetter: 'l2',
-  },
-  {
-    id: 'a3',
-    src: '/room/item-plant.png',
-    title: '窗台的小盆栽',
-    date: '秋天 · 第 100 天',
-    fromLetter: 'l3',
-  },
-  {
-    id: 'a4',
-    src: '/room/item-cushion.png',
-    title: '温暖的软垫',
-    date: '冬天 · 第 200 天',
-    fromLetter: 'l4',
-  },
-]
-
-export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: boolean; onClose: () => void; characterId?: string }) {
   const [selectedImage, setSelectedImage] = useState<AlbumImage | null>(null)
   const [zoomed, setZoomed] = useState(false)
-  const images = DEMO_IMAGES // 实际使用时从数据库获取
+  const [images, setImages] = useState<AlbumImage[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    loadImages()
+  }, [open, characterId])
+
+  const loadImages = async () => {
+    setLoading(true)
+    try {
+      const result = await companionApi.getAttachments(characterId)
+      const mapped = result.attachments.map((a: any) => ({
+        id: a.id,
+        src: a.src || a.attachment_url || '',
+        title: a.title || '美好瞬间',
+        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : (a.created_at ? new Date(a.created_at).toLocaleDateString('zh-CN') : '未知日期'),
+        fromLetter: a.letterId || a.letter_id,
+      }))
+      setImages(mapped)
+    } catch (err) {
+      console.error('Failed to load attachments:', err)
+      setImages([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleClose = () => {
     setSelectedImage(null)
@@ -56,7 +48,19 @@ export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => vo
     onClose()
   }
 
-  // 空相册状态
+  if (loading) {
+    return (
+      <Panel open={open} onClose={handleClose} title="我的相册" icon={<Image className="size-5" />}>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <span className="mb-4 flex size-20 items-center justify-center rounded-full bg-secondary/50">
+            <Image className="size-10 text-muted-foreground animate-pulse" />
+          </span>
+          <p className="font-cute text-base text-muted-foreground">正在加载相册...</p>
+        </div>
+      </Panel>
+    )
+  }
+
   if (images.length === 0) {
     return (
       <Panel open={open} onClose={handleClose} title="我的相册" icon={<Image className="size-5" />}>
@@ -74,7 +78,6 @@ export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <Panel open={open} onClose={handleClose} title="我的相册" icon={<Image className="size-5" />}>
       {selectedImage ? (
-        // 图片详情/放大视图
         <div className="animate-bubble-in">
           <button
             onClick={() => {
@@ -104,7 +107,6 @@ export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => vo
               />
             </div>
 
-            {/* 放大提示 */}
             {!zoomed && (
               <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
                 <ZoomIn className="size-3" /> 点击放大
@@ -123,7 +125,6 @@ export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => vo
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                // TODO: 取消收藏
               }}
               className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-primary transition-colors hover:bg-primary/20"
             >
@@ -133,7 +134,6 @@ export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => vo
           </div>
         </div>
       ) : (
-        // 图片列表
         <div className="flex flex-col gap-3">
           <p className="font-cute text-sm text-muted-foreground">收藏的美好瞬间~</p>
           <div className="grid grid-cols-2 gap-3">
@@ -147,7 +147,7 @@ export function AlbumPanel({ open, onClose }: { open: boolean; onClose: () => vo
                   <img
                     src={img.src}
                     alt={img.title}
-                    className="pixelated h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
                   />
                 </div>
                 <div className="p-2">
