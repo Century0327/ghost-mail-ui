@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Image, X, Heart, ZoomIn, ChevronLeft } from 'lucide-react'
 import { Panel } from './panel'
 import { companionApi } from '@/lib/companion-api'
+import { companionLocal } from '@/lib/companion-local'
+import { extractImagesFromHtml } from '@/lib/letter-utils'
 
 export type AlbumImage = {
   id: string
@@ -26,17 +28,96 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
     setLoading(true)
     try {
       const result = await companionApi.getAttachments(characterId)
-      const mapped = result.attachments.map((a: any) => ({
+      const apiImages = result.attachments.map((a: any) => ({
         id: a.id,
         src: a.src || a.attachment_url || '',
         title: a.title || '美好瞬间',
         date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : (a.created_at ? new Date(a.created_at).toLocaleDateString('zh-CN') : '未知日期'),
         fromLetter: a.letterId || a.letter_id,
       }))
-      setImages(mapped)
+      
+      const localAttachments = companionLocal.getAttachments(characterId)
+      const localImages = localAttachments.map(a => ({
+        id: a.id,
+        src: a.src,
+        title: a.title || '美好瞬间',
+        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+        fromLetter: a.letterId,
+      }))
+      
+      const letters = companionLocal.getLetters(characterId)
+      const letterImages: AlbumImage[] = []
+      letters.forEach(letter => {
+        if (letter.attachmentUrl) {
+          letterImages.push({
+            id: `letter_${letter.id}_0`,
+            src: letter.attachmentUrl,
+            title: letter.subject || '信件图片',
+            date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+            fromLetter: letter.id,
+          })
+        }
+        const extracted = extractImagesFromHtml(letter.body)
+        extracted.forEach((src, idx) => {
+          if (!letterImages.find(i => i.src === src)) {
+            letterImages.push({
+              id: `letter_${letter.id}_${idx}`,
+              src,
+              title: letter.subject || '信件图片',
+              date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+              fromLetter: letter.id,
+            })
+          }
+        })
+      })
+      
+      const allImages = [...apiImages]
+      localImages.forEach(img => {
+        if (!allImages.find(i => i.src === img.src)) allImages.push(img)
+      })
+      letterImages.forEach(img => {
+        if (!allImages.find(i => i.src === img.src)) allImages.push(img)
+      })
+      
+      setImages(allImages)
     } catch (err) {
       console.error('Failed to load attachments:', err)
-      setImages([])
+      const localAttachments = companionLocal.getAttachments(characterId)
+      const localImages = localAttachments.map(a => ({
+        id: a.id,
+        src: a.src,
+        title: a.title || '美好瞬间',
+        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+        fromLetter: a.letterId,
+      }))
+      
+      const letters = companionLocal.getLetters(characterId)
+      const letterImages: AlbumImage[] = []
+      letters.forEach(letter => {
+        if (letter.attachmentUrl) {
+          letterImages.push({
+            id: `letter_${letter.id}_0`,
+            src: letter.attachmentUrl,
+            title: letter.subject || '信件图片',
+            date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+            fromLetter: letter.id,
+          })
+        }
+        const extracted = extractImagesFromHtml(letter.body)
+        extracted.forEach((src, idx) => {
+          if (!letterImages.find(i => i.src === src)) {
+            letterImages.push({
+              id: `letter_${letter.id}_${idx}`,
+              src,
+              title: letter.subject || '信件图片',
+              date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+              fromLetter: letter.id,
+            })
+          }
+        })
+      })
+      
+      setImages([...localImages, ...letterImages])
     } finally {
       setLoading(false)
     }

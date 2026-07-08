@@ -222,7 +222,7 @@ export function CozyRoom() {
   }, [])
 
   // 猫移动到新位置（点击地板）— 匀速移动，速度固定
-  const MOVE_SPEED = 25 // 每秒移动的百分比距离
+  const MOVE_SPEED = 12.5 // 每秒移动的百分比距离（原速度的1/2）
   const moveCatTo = useCallback((x: number, y: number) => {
     const plat = getPlatform(x, y)
     setPlatform(plat)
@@ -573,10 +573,11 @@ export function CozyRoom() {
             src={currentCharacter.image}
             alt={currentCharacter.name}
             style={{
-              width: '30%',
-              minWidth: '130px',
+              width: `${30 + (catPos.y - 60) * 0.5}%`,
+              minWidth: `${100 + (catPos.y - 60) * 1.5}px`,
+              maxWidth: '200px',
               transform: `scaleX(${catFacing === 'left' ? -1 : 1})`,
-              transition: 'transform 0.15s ease',
+              transition: 'transform 0.15s ease, width 0.3s ease, min-width 0.3s ease',
               transformOrigin: 'center bottom',
             }}
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${

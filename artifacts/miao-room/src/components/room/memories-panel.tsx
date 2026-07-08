@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mail, ChevronLeft, Heart, Star, Calendar, Image, ZoomIn } from 'lucide-react'
+import { Mail, ChevronLeft, Heart, Star, Calendar, Image, ZoomIn, Check } from 'lucide-react'
 import { Panel } from './panel'
 import { companionApi } from '@/lib/companion-api'
 import { companionLocal } from '@/lib/companion-local'
+import { cleanLetterBody, extractImagesFromHtml, formatLetterPreview } from '@/lib/letter-utils'
 
 type LetterCategory = 'all' | 'favorite' | 'event'
 
@@ -12,7 +13,7 @@ interface DisplayLetter {
   date: string
   preview: string
   body: string
-  image?: string
+  images: string[]
   category: LetterCategory
 }
 
@@ -28,10 +29,12 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
   const [active, setActive] = useState<DisplayLetter | null>(null)
   const [currentTab, setCurrentTab] = useState<LetterCategory>('all')
   const [zoomed, setZoomed] = useState(false)
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [allLetters, setAllLetters] = useState<DisplayLetter[]>([])
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [favAnimating, setFavAnimating] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,7 +58,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
       
       const result = await companionApi.getLetters(characterId)
       
-      const mapped = result.letters.map((l) => {
+      const mapped = result.letters.map((l: any) => {
         let category: LetterCategory = 'all'
         if (l.source === 'event' || (l as any).category === 'event') {
           category = 'event'
@@ -63,13 +66,22 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
           category = 'favorite'
         }
         
+        const rawBody = l.body || ''
+        const images: string[] = []
+        if (l.attachmentUrl) images.push(l.attachmentUrl)
+        if (l.attachment_url) images.push(l.attachment_url)
+        const extracted = extractImagesFromHtml(rawBody)
+        extracted.forEach(img => {
+          if (!images.includes(img)) images.push(img)
+        })
+        
         return {
           id: l.id,
           title: l.subject || '无标题',
-          date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-          preview: l.body?.slice(0, 30) + (l.body?.length > 30 ? '...' : '') || '',
-          body: l.body || '',
-          image: l.attachmentUrl,
+          date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : (l.created_at ? new Date(l.created_at).toLocaleDateString('zh-CN') : '未知日期'),
+          preview: formatLetterPreview(rawBody, 30),
+          body: cleanLetterBody(rawBody),
+          images,
           category,
         }
       })
@@ -77,13 +89,13 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     } catch (err) {
       console.error('Failed to load letters:', err)
       const localLetters = companionLocal.getLetters(characterId)
-      setAllLetters(localLetters.map((l) => ({
+      setAllLetters(localLetters.map((l: any) => ({
         id: l.id,
         title: l.subject || '无标题',
         date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-        preview: l.body?.slice(0, 30) + (l.body?.length > 30 ? '...' : '') || '',
-        body: l.body || '',
-        image: l.attachmentUrl,
+        preview: formatLetterPreview(l.body || '', 30),
+        body: cleanLetterBody(l.body || ''),
+        images: l.attachmentUrl ? [l.attachmentUrl] : [],
         category: (l.isFavorite ? 'favorite' : 'all') as LetterCategory,
       })))
     } finally {
@@ -122,6 +134,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
   }, [loadingMore, loadMore])
 
   const toggleFavorite = async (letterId: string) => {
+    setFavAnimating(true)
     companionLocal.toggleFavorite(letterId)
     setAllLetters((prev) =>
       prev.map((l) =>
@@ -130,11 +143,31 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
           : l
       )
     )
+    if (active && active.id === letterId) {
+      setActive((prev) => prev ? { ...prev, category: prev.category === 'favorite' ? 'all' : 'favorite' } : null)
+    }
+    setTimeout(() => setFavAnimating(false), 600)
+  }
+
+  const saveImageToAlbum = (imgSrc: string) => {
+    const existing = companionLocal.getAttachments(characterId)
+    if (!existing.find(a => a.src === imgSrc)) {
+      companionLocal.addAttachment({
+        characterId,
+        letterId: active?.id,
+        src: imgSrc,
+        title: active?.title || '美好瞬间',
+        createdAt: new Date().toISOString(),
+      })
+      setFavAnimating(true)
+      setTimeout(() => setFavAnimating(false), 600)
+    }
   }
 
   const handleClose = () => {
     setActive(null)
     setZoomed(false)
+    setActiveImageIndex(0)
     onClose()
   }
 
@@ -144,6 +177,30 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
 
   const displayedLetters = filteredLetters.slice(0, displayCount)
   const hasMore = displayCount < filteredLetters.length
+
+  const renderBody = (body: string) => {
+    const lines = body.split('\n')
+    return lines.map((line, i) => {
+      if (!line.trim()) return <div key={i} className="h-4" />
+      
+      let content = line
+      const isBold = content.startsWith('**') && content.endsWith('**')
+      if (isBold) {
+        content = content.slice(2, -2)
+      }
+      
+      const isItalic = content.startsWith('*') && content.endsWith('*') && !isBold
+      if (isItalic) {
+        content = content.slice(1, -1)
+      }
+      
+      return (
+        <p key={i} className={`text-sm leading-8 sm:text-base ${isBold ? 'font-bold text-foreground' : 'text-foreground/85'} ${isItalic ? 'italic' : ''}`}>
+          {content}
+        </p>
+      )
+    })
+  }
 
   return (
     <Panel open={open} onClose={handleClose} title="记忆信箱" icon={<Mail className="size-5" />}>
@@ -155,6 +212,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                 setZoomed(false)
               } else {
                 setActive(null)
+                setActiveImageIndex(0)
               }
             }}
             className="mb-3 inline-flex items-center gap-1 rounded-full bg-secondary/70 px-3 py-1.5 font-cute text-sm text-secondary-foreground transition-colors hover:bg-secondary"
@@ -175,49 +233,71 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
             <p className="font-cute text-right text-xs text-muted-foreground">{active.date}</p>
             <h3 className="font-cute mt-2 text-center text-xl text-foreground">{active.title}</h3>
 
-            {active.image && (
-              <div
-                className={`my-4 overflow-hidden rounded-xl border border-border/50 ${zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
-                onClick={() => setZoomed(!zoomed)}
-              >
-                <img
-                  src={active.image}
-                  alt={active.title}
-                  className={`w-full object-contain transition-transform duration-300 ${zoomed ? 'scale-150' : ''}`}
-                  style={{ maxHeight: zoomed ? '50vh' : '30vh' }}
-                />
-                {!zoomed && (
-                  <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
-                    <ZoomIn className="size-3" /> 点击放大
+            {active.images.length > 0 && (
+              <div className="my-4">
+                {zoomed ? (
+                  <div className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-out"
+                    onClick={() => setZoomed(false)}
+                  >
+                    <img
+                      src={active.images[activeImageIndex]}
+                      alt=""
+                      className="w-full object-contain scale-150 transition-transform duration-300"
+                      style={{ maxHeight: '50vh' }}
+                    />
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
+                      <ZoomIn className="size-3" /> 点击缩小
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {active.images.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-in"
+                        onClick={() => { setActiveImageIndex(idx); setZoomed(true) }}
+                      >
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-full h-32 object-cover transition-transform duration-300 hover:scale-110"
+                        />
+                        <div className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white/80 backdrop-blur-sm">
+                          <ZoomIn className="size-3" /> 放大
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             )}
 
-            <p className="mt-4 text-sm leading-8 text-foreground/85 sm:text-base">
-              {active.body}
-            </p>
+            <div className="mt-4 space-y-1">
+              {renderBody(active.body)}
+            </div>
 
             <div className="mt-6 flex items-center justify-center gap-2 border-t border-dashed border-border pt-4">
               <button
                 onClick={() => toggleFavorite(active.id)}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all ${
                   active.category === 'favorite'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
-                }`}
+                } ${favAnimating ? 'scale-110' : ''}`}
               >
-                <Heart className={`size-4 ${active.category === 'favorite' ? 'fill-current' : ''}`} />
+                {active.category === 'favorite' ? (
+                  <Check className="size-4" />
+                ) : (
+                  <Heart className={`size-4 ${favAnimating ? 'animate-ping' : ''}`} />
+                )}
                 {active.category === 'favorite' ? '已珍藏' : '珍藏'}
               </button>
-              {active.image && (
+              {active.images.length > 0 && (
                 <button
-                  onClick={() => {
-                    // TODO: 添加到相册
-                  }}
+                  onClick={() => saveImageToAlbum(active.images[activeImageIndex])}
                   className="flex items-center gap-1.5 rounded-full bg-secondary/50 px-4 py-2 font-cute text-sm text-secondary-foreground transition-colors hover:bg-secondary"
                 >
-                  <Image className="size-4" />
+                  <Image className={`size-4 ${favAnimating ? 'animate-ping' : ''}`} />
                   存入相册
                 </button>
               )}
@@ -273,9 +353,9 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                   onClick={() => setActive(letter)}
                   className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-muted/60 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted hover:shadow-md sm:p-4"
                 >
-                  {letter.image ? (
+                  {letter.images.length > 0 ? (
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/30 sm:h-14 sm:w-14">
-                      <img src={letter.image} alt="" className="pixelated size-full object-cover" />
+                      <img src={letter.images[0]} alt="" className="pixelated size-full object-cover" />
                     </div>
                   ) : (
                     <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-secondary/50 sm:size-14">
