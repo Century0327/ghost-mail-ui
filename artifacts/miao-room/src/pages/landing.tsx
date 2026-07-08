@@ -36,8 +36,8 @@ export function LandingPage() {
 
   const handleUserLogin = async () => {
     setError('')
-    if (!steamId) {
-      setError('请输入 Steam ID')
+    if (!steamId || steamId.length !== 17) {
+      setError('Steam ID 应为 17 位数字')
       return
     }
     setLoading(true)
@@ -67,7 +67,7 @@ export function LandingPage() {
   }
 
   const handleTestLogin = () => {
-    setSteamId('test0000000000001')
+    setSteamId('76561197960435530')
     setSteamName('测试玩家')
     setTimeout(() => handleUserLogin(), 100)
   }
@@ -304,7 +304,7 @@ export function LandingPage() {
                     color: '#888', fontSize: 13,
                   }}
                 >
-                  🧪 测试登录（test0000000000001）
+                  🧪 测试登录（76561197960435530）
                 </button>
               </div>
             ) : (
