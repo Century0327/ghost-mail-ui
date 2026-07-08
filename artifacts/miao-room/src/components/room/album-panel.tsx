@@ -3,7 +3,6 @@ import { Image, X, Heart, ZoomIn, ChevronLeft } from 'lucide-react'
 import { Panel } from './panel'
 import { companionApi } from '@/lib/companion-api'
 import { companionLocal } from '@/lib/companion-local'
-import { extractImagesFromHtml } from '@/lib/letter-utils'
 
 export type AlbumImage = {
   id: string
@@ -18,6 +17,11 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
   const [zoomed, setZoomed] = useState(false)
   const [images, setImages] = useState<AlbumImage[]>([])
   const [loading, setLoading] = useState(false)
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set())
+
+  const handleImageError = (src: string) => {
+    setImageErrors(prev => new Set(prev).add(src))
+  }
 
   useEffect(() => {
     if (!open) return
@@ -45,37 +49,8 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
         fromLetter: a.letterId,
       }))
       
-      const letters = companionLocal.getLetters(characterId)
-      const letterImages: AlbumImage[] = []
-      letters.forEach(letter => {
-        if (letter.attachmentUrl) {
-          letterImages.push({
-            id: `letter_${letter.id}_0`,
-            src: letter.attachmentUrl,
-            title: letter.subject || '信件图片',
-            date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-            fromLetter: letter.id,
-          })
-        }
-        const extracted = extractImagesFromHtml(letter.body)
-        extracted.forEach((src, idx) => {
-          if (!letterImages.find(i => i.src === src)) {
-            letterImages.push({
-              id: `letter_${letter.id}_${idx}`,
-              src,
-              title: letter.subject || '信件图片',
-              date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-              fromLetter: letter.id,
-            })
-          }
-        })
-      })
-      
       const allImages = [...apiImages]
       localImages.forEach(img => {
-        if (!allImages.find(i => i.src === img.src)) allImages.push(img)
-      })
-      letterImages.forEach(img => {
         if (!allImages.find(i => i.src === img.src)) allImages.push(img)
       })
       
@@ -91,33 +66,7 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
         fromLetter: a.letterId,
       }))
       
-      const letters = companionLocal.getLetters(characterId)
-      const letterImages: AlbumImage[] = []
-      letters.forEach(letter => {
-        if (letter.attachmentUrl) {
-          letterImages.push({
-            id: `letter_${letter.id}_0`,
-            src: letter.attachmentUrl,
-            title: letter.subject || '信件图片',
-            date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-            fromLetter: letter.id,
-          })
-        }
-        const extracted = extractImagesFromHtml(letter.body)
-        extracted.forEach((src, idx) => {
-          if (!letterImages.find(i => i.src === src)) {
-            letterImages.push({
-              id: `letter_${letter.id}_${idx}`,
-              src,
-              title: letter.subject || '信件图片',
-              date: letter.createdAt ? new Date(letter.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-              fromLetter: letter.id,
-            })
-          }
-        })
-      })
-      
-      setImages([...localImages, ...letterImages])
+      setImages(localImages)
     } finally {
       setLoading(false)
     }
@@ -180,15 +129,23 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
             onClick={() => setZoomed(!zoomed)}
           >
             <div className={`${zoomed ? 'scale-150' : ''} transition-transform duration-300`}>
-              <img
-                src={selectedImage.src}
-                alt={selectedImage.title}
-                className="w-full object-contain"
-                style={{ maxHeight: zoomed ? '60vh' : '40vh' }}
-              />
+              {imageErrors.has(selectedImage.src) ? (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                  <Image className="size-16 mb-2 opacity-50" />
+                  <span className="text-sm">图片加载失败</span>
+                </div>
+              ) : (
+                <img
+                  src={selectedImage.src}
+                  alt={selectedImage.title}
+                  className="w-full object-contain"
+                  style={{ maxHeight: zoomed ? '60vh' : '40vh' }}
+                  onError={() => handleImageError(selectedImage.src)}
+                />
+              )}
             </div>
 
-            {!zoomed && (
+            {!zoomed && !imageErrors.has(selectedImage.src) && (
               <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
                 <ZoomIn className="size-3" /> 点击放大
               </div>
@@ -224,12 +181,19 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
                 onClick={() => setSelectedImage(img)}
                 className="group overflow-hidden rounded-2xl border-2 border-border bg-background/60 text-left transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg"
               >
-                <div className="aspect-square overflow-hidden">
-                  <img
-                    src={img.src}
-                    alt={img.title}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
-                  />
+                <div className="aspect-square overflow-hidden bg-secondary/20">
+                  {imageErrors.has(img.src) ? (
+                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                      <Image className="size-8 opacity-50" />
+                    </div>
+                  ) : (
+                    <img
+                      src={img.src}
+                      alt={img.title}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                      onError={() => handleImageError(img.src)}
+                    />
+                  )}
                 </div>
                 <div className="p-2">
                   <p className="truncate font-cute text-sm text-foreground">{img.title}</p>

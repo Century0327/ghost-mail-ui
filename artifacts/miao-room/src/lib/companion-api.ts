@@ -21,9 +21,21 @@ function getAuthToken(): string | null {
   return localStorage.getItem('ghost_auth_token')
 }
 
+function getSteamId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('steam_id')
+}
+
+function getSteamName(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('steam_name')
+}
+
 async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
   const token = getAuthToken()
   const deviceId = getDeviceId()
+  const steamId = getSteamId()
+  const steamName = getSteamName()
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -34,6 +46,8 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
     ...((options.headers as Record<string, string>) || {}),
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
+  if (steamId) headers['X-Steam-ID'] = steamId
+  if (steamName) headers['X-Steam-Name'] = steamName
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: 'no-store' })
   if (!res.ok) throw new Error(`API ${res.status}`)
@@ -196,6 +210,39 @@ export const companionApi = {
       return { attachments: companionLocal.getAttachments(characterId) }
     } catch {
       return { attachments: companionLocal.getAttachments(characterId) }
+    }
+  },
+
+  // ========== 用户资料与代币（后端优先，本地兜底） ==========
+
+  getProfile: async (): Promise<{ user?: { id: number; steam_id: string; steam_name: string; coins: number; tier: string } }> => {
+    try {
+      const result = await apiFetch('/api/auth/profile')
+      if (result.user?.coins !== undefined) {
+        companionLocal.setCoins(result.user.coins)
+      }
+      return result
+    } catch {
+      return { user: { id: 0, steam_id: 'local', steam_name: '访客', coins: companionLocal.getCoins(), tier: 'basic' } }
+    }
+  },
+
+  buyItem: async (itemId: string, price: number): Promise<{ status: string; coins?: number }> => {
+    try {
+      const result = await apiFetch(`/api/companion/user/items/${itemId}/buy`, {
+        method: 'POST',
+        body: JSON.stringify({ price }),
+      })
+      if (result.coins !== undefined) {
+        companionLocal.setCoins(result.coins)
+      }
+      return result
+    } catch {
+      const coins = companionLocal.getCoins()
+      if (coins < price) throw new Error('金币不足')
+      companionLocal.setCoins(coins - price)
+      companionLocal.addItem(itemId)
+      return { status: 'ok', coins: coins - price }
     }
   },
 

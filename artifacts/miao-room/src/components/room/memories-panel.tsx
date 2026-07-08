@@ -35,7 +35,13 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [favAnimating, setFavAnimating] = useState(false)
+  const [albumAnimating, setAlbumAnimating] = useState(false)
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set())
   const listRef = useRef<HTMLDivElement>(null)
+
+  const handleImageError = (src: string) => {
+    setImageErrors(prev => new Set(prev).add(src))
+  }
 
   useEffect(() => {
     if (!open) {
@@ -149,7 +155,13 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     setTimeout(() => setFavAnimating(false), 600)
   }
 
+  const isImageInAlbum = (imgSrc: string): boolean => {
+    const existing = companionLocal.getAttachments(characterId)
+    return existing.some(a => a.src === imgSrc)
+  }
+
   const saveImageToAlbum = (imgSrc: string) => {
+    setAlbumAnimating(true)
     const existing = companionLocal.getAttachments(characterId)
     if (!existing.find(a => a.src === imgSrc)) {
       companionLocal.addAttachment({
@@ -159,9 +171,8 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
         title: active?.title || '美好瞬间',
         createdAt: new Date().toISOString(),
       })
-      setFavAnimating(true)
-      setTimeout(() => setFavAnimating(false), 600)
     }
+    setTimeout(() => setAlbumAnimating(false), 600)
   }
 
   const handleClose = () => {
@@ -236,32 +247,52 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
             {active.images.length > 0 && (
               <div className="my-4">
                 {zoomed ? (
-                  <div className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-out"
+                  <div className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-out bg-secondary/20"
                     onClick={() => setZoomed(false)}
                   >
-                    <img
-                      src={active.images[activeImageIndex]}
-                      alt=""
-                      className="w-full object-contain scale-150 transition-transform duration-300"
-                      style={{ maxHeight: '50vh' }}
-                    />
+                    {imageErrors.has(active.images[activeImageIndex]) ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                        <Image className="size-12 mb-2 opacity-50" />
+                        <span className="text-sm">图片加载失败</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={active.images[activeImageIndex]}
+                        alt=""
+                        className="w-full object-contain transition-transform duration-300"
+                        style={{ maxHeight: '55vh' }}
+                        onError={() => handleImageError(active.images[activeImageIndex])}
+                      />
+                    )}
                     <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
                       <ZoomIn className="size-3" /> 点击缩小
                     </div>
+                    {active.images.length > 1 && (
+                      <div className="absolute bottom-2 left-2 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
+                        {activeImageIndex + 1} / {active.images.length}
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={`grid gap-2 ${active.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                     {active.images.map((img, idx) => (
                       <div
                         key={idx}
-                        className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-in"
+                        className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-in bg-secondary/20 aspect-video"
                         onClick={() => { setActiveImageIndex(idx); setZoomed(true) }}
                       >
-                        <img
-                          src={img}
-                          alt=""
-                          className="w-full h-32 object-cover transition-transform duration-300 hover:scale-110"
-                        />
+                        {imageErrors.has(img) ? (
+                          <div className="flex h-full items-center justify-center text-muted-foreground">
+                            <Image className="size-6 opacity-50" />
+                          </div>
+                        ) : (
+                          <img
+                            src={img}
+                            alt=""
+                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
+                            onError={() => handleImageError(img)}
+                          />
+                        )}
                         <div className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white/80 backdrop-blur-sm">
                           <ZoomIn className="size-3" /> 放大
                         </div>
@@ -283,24 +314,46 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                   active.category === 'favorite'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
-                } ${favAnimating ? 'scale-110' : ''}`}
+                } ${favAnimating ? 'scale-105' : ''}`}
               >
-                {active.category === 'favorite' ? (
-                  <Check className="size-4" />
-                ) : (
-                  <Heart className={`size-4 ${favAnimating ? 'animate-ping' : ''}`} />
-                )}
+                <span className="relative flex size-4 items-center justify-center">
+                  {active.category === 'favorite' ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <>
+                      <Heart className={`size-4 transition-all ${favAnimating ? 'scale-125' : ''}`} />
+                      {favAnimating && (
+                        <Heart className="size-4 absolute animate-ping opacity-50" />
+                      )}
+                    </>
+                  )}
+                </span>
                 {active.category === 'favorite' ? '已珍藏' : '珍藏'}
               </button>
-              {active.images.length > 0 && (
-                <button
-                  onClick={() => saveImageToAlbum(active.images[activeImageIndex])}
-                  className="flex items-center gap-1.5 rounded-full bg-secondary/50 px-4 py-2 font-cute text-sm text-secondary-foreground transition-colors hover:bg-secondary"
-                >
-                  <Image className={`size-4 ${favAnimating ? 'animate-ping' : ''}`} />
-                  存入相册
-                </button>
-              )}
+              {active.images.length > 0 && (() => {
+                const inAlbum = isImageInAlbum(active.images[activeImageIndex])
+                return (
+                  <button
+                    onClick={() => saveImageToAlbum(active.images[activeImageIndex])}
+                    className={`flex items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all ${
+                      inAlbum
+                        ? 'bg-primary/15 text-primary'
+                        : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
+                    } ${albumAnimating ? 'scale-105' : ''}`}
+                  >
+                    <span className="relative flex size-4 items-center justify-center">
+                      <Image
+                        className={`size-4 transition-all ${albumAnimating ? 'scale-125' : ''}`}
+                        fill={inAlbum ? 'currentColor' : 'none'}
+                      />
+                      {albumAnimating && (
+                        <Image className="size-4 absolute animate-ping opacity-50" />
+                      )}
+                    </span>
+                    {inAlbum ? '已存入' : '存入相册'}
+                  </button>
+                )
+              })()}
             </div>
           </div>
         </div>
@@ -354,8 +407,19 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                   className="group flex items-start gap-3 rounded-2xl border border-border/50 bg-muted/60 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted hover:shadow-md sm:p-4"
                 >
                   {letter.images.length > 0 ? (
-                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/30 sm:h-14 sm:w-14">
-                      <img src={letter.images[0]} alt="" className="pixelated size-full object-cover" />
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/30 bg-secondary/30 sm:h-14 sm:w-14">
+                      {imageErrors.has(letter.images[0]) ? (
+                        <div className="flex h-full items-center justify-center">
+                          <Image className="size-4 text-muted-foreground opacity-50" />
+                        </div>
+                      ) : (
+                        <img
+                          src={letter.images[0]}
+                          alt=""
+                          className="pixelated size-full object-cover"
+                          onError={() => handleImageError(letter.images[0])}
+                        />
+                      )}
                     </div>
                   ) : (
                     <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-secondary/50 sm:size-14">

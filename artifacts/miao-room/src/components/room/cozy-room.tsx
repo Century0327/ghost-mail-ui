@@ -122,8 +122,37 @@ export function CozyRoom() {
   const [previewItems, setPreviewItems] = useState<InventoryItem[]>([])
 
   // 加载代币数据
-  useEffect(() => {
+  const refreshCoins = async () => {
+    try {
+      const result = await companionApi.getProfile()
+      if (result.user?.coins !== undefined) {
+        setCoins(result.user.coins)
+        return true
+      }
+    } catch {
+      // 静默失败，使用本地数据
+    }
     setCoins(companionLocal.getCoins?.() || 100)
+    return false
+  }
+
+  useEffect(() => {
+    refreshCoins()
+    // 每30秒刷新一次代币
+    const timer = setInterval(refreshCoins, 30000)
+    
+    // 页面可见性变化时刷新（用户切回标签页时）
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshCoins()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   // 拖动状态
@@ -634,10 +663,10 @@ export function CozyRoom() {
       </p>
 
       {/* 功能面板 */}
-      <MemoriesPanel open={panel === 'memories'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
+      <MemoriesPanel open={panel === 'memories'} onClose={() => { setPanel(null); refreshCoins() }} characterId={currentCharacter.id} />
       <ShopPanel
         open={panel === 'shop'}
-        onClose={() => { setPanel(null); setCoins(companionLocal.getCoins?.() || 100); }}
+        onClose={() => { setPanel(null); refreshCoins() }}
         onPreviewChange={setPreviewItems}
       />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
