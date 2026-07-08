@@ -3,7 +3,7 @@
   "outputDirectory": "artifacts/miao-room/dist/public",
   "installCommand": "pnpm install",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://YOUR_API_SERVER_URL/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://random-ai-mail-ghost.vercel.app/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
