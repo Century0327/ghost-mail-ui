@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
-import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Save, Trash2 } from 'lucide-react'
+import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Save, Trash2, Plus, Minus, ShoppingCart } from 'lucide-react'
 import { SHOP_ITEMS, type ShopItem } from '@/lib/companion-data'
 import { companionLocal } from '@/lib/companion-local'
 
-type Tab = 'warehouse' | 'shop'
+type Tab = 'warehouse' | 'shop' | 'cart'
 
 export type InventoryItem = ShopItem & {
   position?: { x: number; y: number }
@@ -11,6 +11,11 @@ export type InventoryItem = ShopItem & {
   hidden?: boolean
   preview?: boolean
   selected?: boolean
+}
+
+type CartItem = ShopItem & {
+  cartId: string
+  quantity: number
 }
 
 function ItemIcon({
@@ -55,6 +60,7 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showReceipt, setShowReceipt] = useState(false)
   const [coins, setCoins] = useState(100)
+  const [cart, setCart] = useState<CartItem[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -77,6 +83,7 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
     setInventory(inv)
     setSelectedIds(new Set())
     setCoins(companionLocal.getCoins?.() || 100)
+    setCart([])
   }, [open])
 
   useEffect(() => {
@@ -109,21 +116,64 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
     )
   }, [])
 
-  const handleBuy = useCallback((item: ShopItem) => {
-    if (coins < item.price) return
-    const newItem: InventoryItem = {
-      ...item,
-      id: `${item.id}_${Date.now()}`,
-      position: { x: 50, y: 60 },
-      rotation: 0,
-      hidden: false,
-      preview: false,
-    }
-    setInventory(prev => [...prev, newItem])
-    setCoins(prev => prev - item.price)
-    companionLocal.addItem(item.id)
-    companionLocal.setCoins?.(coins - item.price)
-  }, [coins])
+  const addToCart = useCallback((item: ShopItem) => {
+    setCart(prev => {
+      const existing = prev.find(c => c.id === item.id)
+      if (existing) {
+        return prev.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c)
+      }
+      return [...prev, { ...item, cartId: `${item.id}_${Date.now()}`, quantity: 1 }]
+    })
+  }, [])
+
+  const removeFromCart = useCallback((cartId: string) => {
+    setCart(prev => prev.filter(c => c.cartId !== cartId))
+  }, [])
+
+  const decreaseQuantity = useCallback((cartId: string) => {
+    setCart(prev => {
+      const item = prev.find(c => c.cartId === cartId)
+      if (!item) return prev
+      if (item.quantity <= 1) {
+        return prev.filter(c => c.cartId !== cartId)
+      }
+      return prev.map(c => c.cartId === cartId ? { ...c, quantity: c.quantity - 1 } : c)
+    })
+  }, [])
+
+  const increaseQuantity = useCallback((cartId: string) => {
+    setCart(prev => prev.map(c => c.cartId === cartId ? { ...c, quantity: c.quantity + 1 } : c))
+  }, [])
+
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+  const canAffordCart = coins >= cartTotal
+
+  const handleCheckout = useCallback(() => {
+    if (!canAffordCart || cart.length === 0) return
+
+    const newInventoryItems: InventoryItem[] = []
+    cart.forEach(item => {
+      for (let i = 0; i < item.quantity; i++) {
+        const newItem: InventoryItem = {
+          ...item,
+          id: `${item.id}_${Date.now()}_${i}`,
+          position: { x: 50 + (Math.random() - 0.5) * 20, y: 60 + (Math.random() - 0.5) * 10 },
+          rotation: 0,
+          hidden: false,
+          preview: false,
+        }
+        newInventoryItems.push(newItem)
+        companionLocal.addItem(item.id)
+      }
+    })
+
+    setInventory(prev => [...prev, ...newInventoryItems])
+    setCoins(prev => prev - cartTotal)
+    companionLocal.setCoins?.(coins - cartTotal)
+    setCart([])
+    setCurrentTab('warehouse')
+  }, [cart, coins, canAffordCart])
 
   const handleRemove = useCallback((itemId: string) => {
     setInventory(prev => prev.filter(i => i.id !== itemId))
@@ -135,8 +185,6 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
   }, [])
 
   const selectedItems = inventory.filter(i => selectedIds.has(i.id))
-  const newPurchaseItems = selectedItems.filter(i => i.id.startsWith('new_'))
-  const totalPrice = newPurchaseItems.reduce((sum, item) => sum + item.price, 0)
 
   const handleSave = () => {
     setShowReceipt(true)
@@ -181,6 +229,20 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
               >
                 <ShoppingBag className="size-5" />
                 商店
+              </button>
+              <button
+                onClick={() => setCurrentTab('cart')}
+                className={`flex flex-1 items-center justify-center gap-2 px-4 py-3.5 font-pixel text-sm transition-colors ${
+                  currentTab === 'cart'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <ShoppingCart className="size-5" />
+                购物车
+                {cartCount > 0 && (
+                  <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{cartCount}</span>
+                )}
               </button>
               <div className="flex items-center gap-2 px-3">
                 <span className="flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 font-pixel text-sm text-amber-800">
@@ -261,7 +323,7 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
                     })}
                   </div>
                 )
-              ) : (
+              ) : currentTab === 'shop' ? (
                 <div className="grid grid-cols-4 gap-3 pb-2 sm:grid-cols-6">
                   {SHOP_ITEMS.map((item) => {
                     const owned = inventory.some((i) => i.id.startsWith(item.id))
@@ -286,7 +348,7 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
                           <span className="mt-1.5 font-pixel text-[10px] text-green-600">已拥有</span>
                         ) : (
                           <button
-                            onClick={() => handleBuy(item)}
+                            onClick={() => addToCart(item)}
                             disabled={!canAfford}
                             className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-full px-2 py-1 font-pixel text-[10px] transition ${
                               canAfford
@@ -294,6 +356,7 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
                                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             }`}
                           >
+                            <Plus className="size-3" />
                             <span>🥫</span>
                             {item.price}
                           </button>
@@ -302,27 +365,99 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
                     )
                   })}
                 </div>
+              ) : (
+                cart.length === 0 ? (
+                  <div className="flex min-h-32 flex-col items-center justify-center py-8 text-center">
+                    <span className="mb-3 flex size-14 items-center justify-center rounded-full bg-secondary/50">
+                      <ShoppingCart className="size-7 text-muted-foreground" />
+                    </span>
+                    <p className="font-pixel text-muted-foreground">购物车是空的</p>
+                    <p className="mt-1 text-xs text-muted-foreground/70">去商店添加点东西吧</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 pb-2">
+                    {cart.map((item) => (
+                      <div
+                        key={item.cartId}
+                        className="flex items-center gap-3 rounded-2xl border-2 border-border bg-background/60 p-3"
+                      >
+                        <ItemIcon item={item} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-pixel text-sm text-foreground truncate">{item.name}</p>
+                          <p className="font-pixel text-xs text-amber-600">🥫 {item.price} / 个</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => decreaseQuantity(item.cartId)}
+                            className="flex size-7 items-center justify-center rounded-full bg-secondary/50 transition hover:bg-secondary"
+                          >
+                            <Minus className="size-3 text-muted-foreground" />
+                          </button>
+                          <span className="font-pixel text-sm w-6 text-center">{item.quantity}</span>
+                          <button
+                            onClick={() => increaseQuantity(item.cartId)}
+                            className="flex size-7 items-center justify-center rounded-full bg-secondary/50 transition hover:bg-secondary"
+                          >
+                            <Plus className="size-3 text-muted-foreground" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeFromCart(item.cartId)}
+                          className="flex size-8 items-center justify-center rounded-full bg-red-100 transition hover:bg-red-200"
+                          title="移除"
+                        >
+                          <Trash2 className="size-4 text-red-500" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
 
             <div className="flex items-center gap-3 border-t-2 border-border/70 bg-secondary/40 px-4 py-3 shrink-0">
               <div className="flex-1">
-                <p className="font-pixel text-xs text-muted-foreground">
-                  已选 {selectedItems.length} 件物品
-                </p>
-                {totalPrice > 0 && (
-                  <p className="font-pixel text-sm text-amber-600">
-                    合计：🥫 {totalPrice}
-                  </p>
+                {currentTab === 'cart' ? (
+                  <>
+                    <p className="font-pixel text-xs text-muted-foreground">
+                      购物车 {cartCount} 件商品
+                    </p>
+                    {cartTotal > 0 && (
+                      <p className="font-pixel text-sm text-amber-600">
+                        合计：🥫 {cartTotal}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="font-pixel text-xs text-muted-foreground">
+                      已选 {selectedItems.length} 件物品
+                    </p>
+                  </>
                 )}
               </div>
-              <button
-                onClick={handleSave}
-                className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 font-pixel text-sm text-primary-foreground transition hover:brightness-105 active:scale-95"
-              >
-                <Save className="size-4" />
-                保存
-              </button>
+              {currentTab === 'cart' ? (
+                <button
+                  onClick={handleCheckout}
+                  disabled={!canAffordCart || cart.length === 0}
+                  className={`flex items-center gap-1.5 rounded-full px-5 py-2 font-pixel text-sm transition active:scale-95 ${
+                    canAffordCart && cart.length > 0
+                      ? 'bg-amber-500 text-white hover:brightness-105'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <ShoppingCart className="size-4" />
+                  确认支付
+                </button>
+              ) : (
+                <button
+                  onClick={handleSave}
+                  className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 font-pixel text-sm text-primary-foreground transition hover:brightness-105 active:scale-95"
+                >
+                  <Save className="size-4" />
+                  保存
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -350,16 +485,6 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
                   ))}
                 </div>
               )}
-              
-              <div className="mt-4 border-t border-dashed border-border pt-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-pixel text-sm text-foreground">总计</span>
-                  <span className="font-pixel text-base text-amber-600">🥫 {totalPrice}</span>
-                </div>
-                <p className="mt-1 text-right font-pixel text-[10px] text-muted-foreground">
-                  余额：🥫 {coins}
-                </p>
-              </div>
             </div>
 
             <div className="mt-5 flex gap-3">

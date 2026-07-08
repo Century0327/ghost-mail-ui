@@ -34,9 +34,9 @@ export type ScheduleItem = {
 }
 
 export const SCHEDULE: ScheduleItem[] = [
-  { time: '08:00', text: '我在窗台看云，顺便晒晒毛。', done: true },
-  { time: '09:30', text: '吃了一小碗早饭，心满意足。', done: true },
-  { time: '10:00', text: '正在整理旧信件，翻到好多回忆。', done: true },
+  { time: '08:00', text: '在窗台看云，顺便晒晒毛。', done: false },
+  { time: '09:30', text: '准备吃一小碗早饭。', done: false },
+  { time: '10:00', text: '整理旧信件，翻翻回忆。', done: false },
   { time: '12:00', text: '午后小睡，梦里都是暖暖的。', done: false },
   { time: '15:00', text: '想去货架那边挑点小零食。', done: false },
   { time: '17:30', text: '坐在地毯上等你回家。', done: false },
