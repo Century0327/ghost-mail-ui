@@ -34,13 +34,17 @@ export type ScheduleItem = {
 }
 
 export const SCHEDULE: ScheduleItem[] = [
-  { time: '08:00', text: '在窗台看云，顺便晒晒毛。', done: false },
-  { time: '09:30', text: '准备吃一小碗早饭。', done: false },
-  { time: '10:00', text: '整理旧信件，翻翻回忆。', done: false },
-  { time: '12:00', text: '午后小睡，梦里都是暖暖的。', done: false },
-  { time: '15:00', text: '想去货架那边挑点小零食。', done: false },
-  { time: '17:30', text: '坐在地毯上等你回家。', done: false },
-  { time: '20:00', text: '和你说说今天发生的事。', done: false },
+  { time: '05:30', text: '黎明苏醒，伸个大懒腰。', done: false },
+  { time: '06:00', text: '在窗台巡视领地。', done: false },
+  { time: '07:30', text: '吃早餐，舔舔爪子。', done: false },
+  { time: '09:00', text: '找个阳光好的地方打盹。', done: false },
+  { time: '12:00', text: '午睡，蜷缩成一团。', done: false },
+  { time: '14:00', text: '偶尔醒来，翻个身继续睡。', done: false },
+  { time: '16:30', text: '醒来梳理毛发。', done: false },
+  { time: '18:00', text: '黄昏捕猎游戏时间。', done: false },
+  { time: '19:30', text: '吃晚餐，巡视房间。', done: false },
+  { time: '21:00', text: '跑酷时间，释放精力。', done: false },
+  { time: '23:00', text: '舔毛准备睡觉。', done: false },
 ]
 
 // "记忆"收藏夹里的信件
