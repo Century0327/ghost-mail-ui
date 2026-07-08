@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  base: "/random-ai-mail-ghost/",
+  base: "/",
   plugins: [
     react(),
     tailwindcss(),
