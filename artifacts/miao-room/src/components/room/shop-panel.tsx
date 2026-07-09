@@ -62,6 +62,9 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showReceipt, setShowReceipt] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
+  const [previewItem, setPreviewItem] = useState<ShopItem | null>(null)
+  const [showPaymentReceipt, setShowPaymentReceipt] = useState(false)
+  const [isBuying, setIsBuying] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -149,42 +152,88 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
   const canAffordCart = coins >= cartTotal
 
-  const handleCheckout = useCallback(async () => {
-    if (!canAffordCart || cart.length === 0) return
+  // 打开物品预览
+  const openPreview = useCallback((item: ShopItem) => {
+    setPreviewItem(item)
+  }, [])
 
-    // 调用后端 API 逐个购买（购物车同步扣减）
+  // 从预览弹窗加入购物车
+  const addToCartFromPreview = useCallback(() => {
+    if (!previewItem) return
+    setCart(prev => {
+      const existing = prev.find(c => c.id === previewItem.id)
+      if (existing) {
+        return prev.map(c => c.id === previewItem.id ? { ...c, quantity: c.quantity + 1 } : c)
+      }
+      return [...prev, { ...previewItem, cartId: `${previewItem.id}_${Date.now()}`, quantity: 1 }]
+    })
+    setPreviewItem(null)
+  }, [previewItem])
+
+  // 点击确认支付 → 打开支付小票
+  const handleCheckout = useCallback(() => {
+    if (!canAffordCart || cart.length === 0) return
+    setShowPaymentReceipt(true)
+  }, [canAffordCart, cart])
+
+  // 小票确认后真正扣款购买
+  const confirmCheckout = useCallback(async () => {
+    if (!canAffordCart || cart.length === 0) return
+    setIsBuying(true)
     try {
-      for (const item of cart) {
-        for (let i = 0; i < item.quantity; i++) {
-          await companionApi.buyItem(item.id, item.price)
-        }
+      const items = cart.map(item => ({
+        item_id: item.id,
+        quantity: item.quantity,
+        price: item.price,
+      }))
+      const result = await companionApi.buyItems(items)
+      if (result.status === 'ok') {
+        // 更新本地金币（后端返回新余额，或前端计算）
+        const newCoins = result.coins ?? (coins - cartTotal)
+        companionLocal.setCoins(newCoins)
+
+        const newInventoryItems: InventoryItem[] = []
+        cart.forEach(item => {
+          for (let i = 0; i < item.quantity; i++) {
+            const newItem: InventoryItem = {
+              ...item,
+              id: `${item.id}_${Date.now()}_${i}`,
+              position: { x: 50 + (Math.random() - 0.5) * 20, y: 60 + (Math.random() - 0.5) * 10 },
+              rotation: 0,
+              hidden: false,
+              preview: false,
+            }
+            newInventoryItems.push(newItem)
+            companionLocal.addItem(item.id)
+          }
+        })
+
+        setInventory(prev => [...prev, ...newInventoryItems])
+        setCart([])
+        setShowPaymentReceipt(false)
+        setCurrentTab('warehouse')
+      } else {
+        alert(result.message || '购买失败')
       }
     } catch (err) {
       console.error('购买失败:', err)
       alert('购买失败，请稍后重试')
-      return
+    } finally {
+      setIsBuying(false)
     }
+  }, [cart, coins, cartTotal, canAffordCart])
 
-    const newInventoryItems: InventoryItem[] = []
-    cart.forEach(item => {
-      for (let i = 0; i < item.quantity; i++) {
-        const newItem: InventoryItem = {
-          ...item,
-          id: `${item.id}_${Date.now()}_${i}`,
-          position: { x: 50 + (Math.random() - 0.5) * 20, y: 60 + (Math.random() - 0.5) * 10 },
-          rotation: 0,
-          hidden: false,
-          preview: false,
-        }
-        newInventoryItems.push(newItem)
-        companionLocal.addItem(item.id)
-      }
-    })
-
-    setInventory(prev => [...prev, ...newInventoryItems])
-    setCart([])
-    setCurrentTab('warehouse')
-  }, [cart, coins, canAffordCart])
+  // 物品分类中文标签
+  const getCategoryLabel = (category?: string) => {
+    const map: Record<string, string> = {
+      food: '食物',
+      toy: '玩具',
+      furniture: '家具',
+      decoration: '装饰',
+      item: '道具',
+    }
+    return map[category || 'item'] || '道具'
+  }
 
   const handleRemove = useCallback((itemId: string) => {
     setInventory(prev => prev.filter(i => i.id !== itemId))
@@ -342,8 +391,9 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
                     return (
                       <div
                         key={item.id}
+                        onClick={() => !owned && openPreview(item)}
                         className={`relative flex flex-col items-center rounded-2xl border-2 bg-background/60 p-2.5 transition-all ${
-                          owned ? 'opacity-60' : 'border-border hover:border-primary/40 hover:shadow-sm'
+                          owned ? 'opacity-60 cursor-default' : 'border-border hover:border-primary/40 hover:shadow-sm cursor-pointer'
                         }`}
                       >
                         {owned && (
@@ -358,19 +408,14 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
                         {owned ? (
                           <span className="mt-1.5 font-pixel text-[10px] text-green-600">已拥有</span>
                         ) : (
-                          <button
-                            onClick={() => addToCart(item)}
-                            disabled={!canAfford}
-                            className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-full px-2 py-1 font-pixel text-[10px] transition ${
-                              canAfford
-                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            }`}
-                          >
-                            <Plus className="size-3" />
+                          <div className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-full px-2 py-1 font-pixel text-[10px] ${
+                            canAfford
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-gray-100 text-gray-400'
+                          }`}>
                             <span>🥫</span>
                             {item.price}
-                          </button>
+                          </div>
                         )}
                       </div>
                     )
@@ -510,6 +555,100 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
                 className="flex-1 rounded-full bg-primary py-2.5 font-pixel text-sm text-primary-foreground transition hover:brightness-105"
               >
                 确认保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 物品预览弹窗 */}
+      {previewItem && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-card p-6 shadow-2xl animate-bubble-in">
+            <div className="flex flex-col items-center">
+              <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-2xl" style={{ backgroundColor: previewItem.emojiColor + '33' }}>
+                {previewItem.image ? (
+                  <img src={previewItem.image} alt={previewItem.name} className="pixelated h-16 w-16 object-contain" />
+                ) : (
+                  <span className="h-16 w-16 rounded-xl border-2 border-border/60" style={{ backgroundColor: previewItem.emojiColor }} />
+                )}
+              </div>
+              <h3 className="mb-1 text-center font-pixel text-lg text-foreground">{previewItem.name}</h3>
+              <p className="mb-1 text-center text-xs text-muted-foreground">{getCategoryLabel(previewItem.category)}</p>
+              <p className="mb-4 text-center text-sm text-muted-foreground">{previewItem.desc}</p>
+              <div className="mb-5 flex items-center gap-1 font-pixel text-amber-600">
+                <span>🥫</span>
+                <span>{previewItem.price}</span>
+              </div>
+              <div className="flex w-full gap-3">
+                <button
+                  onClick={() => setPreviewItem(null)}
+                  className="flex-1 rounded-full bg-secondary py-2.5 font-pixel text-sm text-secondary-foreground transition hover:bg-secondary/80"
+                >
+                  关闭
+                </button>
+                <button
+                  onClick={addToCartFromPreview}
+                  className="flex-1 rounded-full bg-amber-500 py-2.5 font-pixel text-sm text-white transition hover:brightness-105"
+                >
+                  预购
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 支付小票弹窗 */}
+      {showPaymentReceipt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-card p-6 shadow-2xl animate-bubble-in">
+            <h3 className="mb-4 text-center font-pixel text-lg text-foreground">支付小票</h3>
+            
+            <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-4">
+              <div className="mb-3 border-b border-dashed border-border pb-2">
+                <p className="font-pixel text-xs text-muted-foreground">商品清单</p>
+              </div>
+              
+              <div className="space-y-2">
+                {cart.map(item => (
+                  <div key={item.cartId} className="flex items-center justify-between">
+                    <span className="font-pixel text-xs text-foreground">{item.name}</span>
+                    <span className="font-pixel text-xs text-muted-foreground">🥫 {item.price} × {item.quantity}</span>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-3 border-t border-dashed border-border pt-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-xs text-muted-foreground">合计</span>
+                  <span className="font-pixel text-sm text-amber-600">🥫 {cartTotal}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-xs text-muted-foreground">当前余额</span>
+                  <span className="font-pixel text-xs text-foreground">🥫 {coins}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-xs text-muted-foreground">购买后余额</span>
+                  <span className={`font-pixel text-xs ${coins - cartTotal < 0 ? 'text-red-500' : 'text-foreground'}`}>🥫 {coins - cartTotal}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowPaymentReceipt(false)}
+                disabled={isBuying}
+                className="flex-1 rounded-full bg-secondary py-2.5 font-pixel text-sm text-secondary-foreground transition hover:bg-secondary/80 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmCheckout}
+                disabled={isBuying || !canAffordCart}
+                className="flex-1 rounded-full bg-amber-500 py-2.5 font-pixel text-sm text-white transition hover:brightness-105 disabled:opacity-50"
+              >
+                {isBuying ? '支付中...' : '确认支付'}
               </button>
             </div>
           </div>

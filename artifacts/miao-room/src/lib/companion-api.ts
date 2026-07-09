@@ -245,6 +245,18 @@ export const companionApi = {
     return result
   },
 
+  previewItem: async (itemId: string): Promise<{ item?: { id: string; name: string; desc: string; category: string; price: number; emojiColor: string; image?: string } }> => {
+    return apiFetch(`/api/companion/items/${itemId}/preview`)
+  },
+
+  buyItems: async (items: { item_id: string; quantity: number; price: number }[]): Promise<{ status: string; coins?: number; total_spent?: number; items_added?: any[] }> => {
+    const result = await apiFetch('/api/companion/user/items/batch-buy', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    })
+    return result
+  },
+
   // ========== AI 日程生成 ==========
 
   generateSchedule: (data: {
