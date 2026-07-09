@@ -120,35 +120,41 @@ export function CozyRoom() {
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null)
   const [coins, setCoins] = useState(100)
   const [previewItems, setPreviewItems] = useState<InventoryItem[]>([])
+  const coinsSyncedRef = useRef(false)
 
-  // 加载代币数据
-  const refreshCoins = async () => {
+  // 加载代币数据（后端优先，成功后不再被本地值覆盖）
+  const refreshCoins = async (force = false) => {
+    if (coinsSyncedRef.current && !force) return true
     try {
       const result = await companionApi.getProfile()
       if (result.user?.coins !== undefined) {
         setCoins(result.user.coins)
+        coinsSyncedRef.current = true
         return true
       }
-    } catch {
-      // 静默失败，使用本地数据
+    } catch (err) {
+      console.error('[CozyRoom] 同步代币失败:', err)
     }
-    setCoins(companionLocal.getCoins?.() || 100)
+    // 只有从未成功同步过时才使用本地兜底
+    if (!coinsSyncedRef.current) {
+      setCoins(companionLocal.getCoins?.() || 100)
+    }
     return false
   }
 
   useEffect(() => {
     refreshCoins()
-    // 每30秒刷新一次代币
-    const timer = setInterval(refreshCoins, 30000)
-    
+    // 每60秒刷新一次代币（频率降低，避免竞态）
+    const timer = setInterval(() => refreshCoins(true), 60000)
+
     // 页面可见性变化时刷新（用户切回标签页时）
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        refreshCoins()
+        refreshCoins(true)
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    
+
     return () => {
       clearInterval(timer)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -664,10 +670,10 @@ export function CozyRoom() {
       </p>
 
       {/* 功能面板 */}
-      <MemoriesPanel open={panel === 'memories'} onClose={() => { setPanel(null); refreshCoins() }} characterId={currentCharacter.id} />
+      <MemoriesPanel open={panel === 'memories'} onClose={() => { setPanel(null); refreshCoins(true) }} characterId={currentCharacter.id} />
       <ShopPanel
         open={panel === 'shop'}
-        onClose={() => { setPanel(null); refreshCoins() }}
+        onClose={() => { setPanel(null); refreshCoins(true) }}
         onPreviewChange={setPreviewItems}
       />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />

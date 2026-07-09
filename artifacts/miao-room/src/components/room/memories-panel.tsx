@@ -307,10 +307,10 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
               {renderBody(active.body)}
             </div>
 
-            <div className="mt-6 flex items-center justify-center gap-2 border-t border-dashed border-border pt-4">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-dashed border-border pt-4">
               <button
                 onClick={() => toggleFavorite(active.id)}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all ${
+                className={`flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all active:scale-95 ${
                   active.category === 'favorite'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
@@ -328,33 +328,35 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                     </>
                   )}
                 </span>
-                {active.category === 'favorite' ? '已珍藏' : '珍藏'}
+                <span>{active.category === 'favorite' ? '已珍藏' : '珍藏'}</span>
               </button>
-              {active.images.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">存入相册:</span>
-                  {active.images.map((img, idx) => {
-                    const inAlbum = isImageInAlbum(img)
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => saveImageToAlbum(img)}
-                        className={`relative flex size-8 items-center justify-center rounded-full transition-all ${
-                          inAlbum
-                            ? 'bg-primary/15 text-primary'
-                            : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
-                        }`}
-                        title={inAlbum ? '已存入' : '存入相册'}
-                      >
-                        <Image
-                          className={`size-4 transition-all`}
-                          fill={inAlbum ? 'currentColor' : 'none'}
-                        />
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+
+              {active.images.length > 0 && (() => {
+                const currentImg = active.images[activeImageIndex]
+                const inAlbum = isImageInAlbum(currentImg)
+                return (
+                  <button
+                    onClick={() => saveImageToAlbum(currentImg)}
+                    disabled={inAlbum}
+                    className={`flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all active:scale-95 ${
+                      inAlbum
+                        ? 'bg-primary/15 text-primary cursor-default'
+                        : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
+                    } ${albumAnimating ? 'scale-105' : ''}`}
+                  >
+                    <span className="relative flex size-4 items-center justify-center">
+                      <Image
+                        className={`size-4 transition-all ${albumAnimating && !inAlbum ? 'scale-125' : ''}`}
+                        fill={inAlbum ? 'currentColor' : 'none'}
+                      />
+                      {albumAnimating && !inAlbum && (
+                        <Image className="size-4 absolute animate-ping opacity-50" />
+                      )}
+                    </span>
+                    <span>{inAlbum ? '已存入' : '存入相册'}</span>
+                  </button>
+                )
+              })()}
             </div>
           </div>
         </div>

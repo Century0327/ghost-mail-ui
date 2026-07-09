@@ -216,15 +216,11 @@ export const companionApi = {
   // ========== 用户资料与代币（后端优先，本地兜底） ==========
 
   getProfile: async (): Promise<{ user?: { id: number; steam_id: string; steam_name: string; coins: number; tier: string } }> => {
-    try {
-      const result = await apiFetch('/api/auth/profile')
-      if (result.user?.coins !== undefined) {
-        companionLocal.setCoins(result.user.coins)
-      }
-      return result
-    } catch {
-      return { user: { id: 0, steam_id: 'local', steam_name: '访客', coins: companionLocal.getCoins(), tier: 'basic' } }
+    const result = await apiFetch('/api/auth/profile')
+    if (result.user?.coins !== undefined) {
+      companionLocal.setCoins(result.user.coins)
     }
+    return result
   },
 
   buyItem: async (itemId: string, price: number): Promise<{ status: string; coins?: number }> => {
