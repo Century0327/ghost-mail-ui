@@ -356,7 +356,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
               <div className="flex items-center gap-2 px-3">
                 <span className={`flex items-center gap-1 rounded-full px-3 py-1 font-pixel text-sm ${
                   pendingTotal > 0 ? 'bg-amber-100 text-amber-800' : 'bg-amber-50 text-amber-600'
-                }">
+                }`}>
                   <span className="text-base">🥫</span>
                   {coins}
                   {pendingTotal > 0 && (
@@ -420,7 +420,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
                             title={item.hidden ? '显示' : '隐藏'}
                             className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
                           >
-                            {item.hidden ? <Eye className="size-3 text-muted-foreground" /> : <EyeOff className="size-3 text-muted-foreground" />
+                            {item.hidden ? <Eye className="size-3 text-muted-foreground" /> : <EyeOff className="size-3 text-muted-foreground" />}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
