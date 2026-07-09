@@ -3,11 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Heart } from 'lucide-react'
 import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, SHOP_ITEMS, type Character } from '@/lib/companion-data'
 import { companionApi } from '@/lib/companion-api'
-import { companionLocal } from '@/lib/companion-local'
+import { companionLocal, type PlayerFurniture } from '@/lib/companion-local'
 import { SpeechBubble } from './speech-bubble'
 import { ThoughtBubble } from './thought-bubble'
 import { MemoriesPanel } from './memories-panel'
-import { ShopPanel, type InventoryItem } from './shop-panel'
+import { ShopPanel } from './shop-panel'
 import { SchedulePanel } from './schedule-panel'
 import { SettingsMenu } from './settings-menu'
 import { AlbumPanel } from './album-panel'
@@ -98,6 +98,52 @@ function getPlatform(x: number, y: number) {
   return PLATFORMS.find((p) => x >= p.x1 && x <= p.x2 && y >= p.y1 && y <= p.y2) ?? null
 }
 
+// 夜晚偏好本地存储 key
+const LS_NIGHT_PREF_KEY = 'ghost_night_preference'
+
+function getTodayStr(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+// 读取夜晚偏好，若当天有记录则返回，否则返回 null
+function loadNightPreference(): boolean | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(LS_NIGHT_PREF_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (data.date === getTodayStr()) {
+      return data.isNight
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// 保存夜晚偏好（带日期）
+function saveNightPreference(isNight: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(LS_NIGHT_PREF_KEY, JSON.stringify({
+      date: getTodayStr(),
+      isNight,
+    }))
+  } catch {
+    // ignore
+  }
+}
+
+// globalShopItems 商品字典
+const GLOBAL_SHOP_ITEMS: Record<string, { name: string; emojiColor: string; image?: string }> = {}
+SHOP_ITEMS.forEach(item => {
+  GLOBAL_SHOP_ITEMS[item.id] = { name: item.name, emojiColor: item.emojiColor, image: item.image }
+})
+// 补充默认物品
+GLOBAL_SHOP_ITEMS['cat_bed'] = { name: '猫窝', emojiColor: '#e8a87c', image: '/room/item-catbed.png' }
+GLOBAL_SHOP_ITEMS['carpet'] = { name: '地毯', emojiColor: '#c9b79c', image: '/room/item-carpet.png' }
+GLOBAL_SHOP_ITEMS['lamp'] = { name: '台灯', emojiColor: '#e0b04a', image: '/room/item-lamp.png' }
+
 export function CozyRoom() {
   const [uiHidden, setUiHidden] = useState(false)
   const [panel, setPanel] = useState<PanelKind>(null)
@@ -105,7 +151,14 @@ export function CozyRoom() {
   const [speech, setSpeech] = useState<string | null>(null)
   const [thought, setThought] = useState<string | null>(null)
   const [infoBarVisible, setInfoBarVisible] = useState(false)
-  const [isNight, setIsNight] = useState(false)
+  const [isNight, setIsNight] = useState(() => {
+    // 优先读取本地存储的用户偏好
+    const saved = loadNightPreference()
+    if (saved !== null) return saved
+    // 否则根据时间自动判断
+    const h = new Date().getHours()
+    return h >= 18 || h < 6
+  })
 
   const [currentCharacter, setCurrentCharacter] = useState<Character>(OFFICIAL_CHARACTERS[0])
   const [ownedCharacterIds, setOwnedCharacterIds] = useState<string[]>(['kitty'])
@@ -119,41 +172,30 @@ export function CozyRoom() {
   const [moveDuration, setMoveDuration] = useState(0.9)
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null)
   const [coins, setCoins] = useState(100)
-  const [previewItems, setPreviewItems] = useState<InventoryItem[]>([])
+  const [roomFurniture, setRoomFurniture] = useState<PlayerFurniture[]>([])
+  const [albumRefreshTrigger, setAlbumRefreshTrigger] = useState(0)
   const coinsSyncedRef = useRef(false)
-  const itemsLoadedRef = useRef(false)
+  const skipRefreshRef = useRef(false)
+  const skipRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // 初始加载物品布局
+  // 初始加载房间家具（只查 status 为 in_room 的）
   useEffect(() => {
-    if (itemsLoadedRef.current) return
-    const savedLayout = companionLocal.getItemsLayout()
-    if (savedLayout.length > 0) {
-      const items: InventoryItem[] = savedLayout.map(layout => {
-        const shopItem = SHOP_ITEMS.find(s => s.id === layout.itemId)
-        return {
-          id: layout.id,
-          name: shopItem?.name || layout.itemId,
-          desc: shopItem?.desc || '',
-          price: shopItem?.price || 0,
-          emojiColor: shopItem?.emojiColor || '#ccc',
-          image: shopItem?.image,
-          category: shopItem?.category,
-          position: layout.position,
-          rotation: layout.rotation,
-          hidden: layout.hidden,
-        }
-      }).filter(item => !item.hidden)
-      setPreviewItems(items)
-    }
-    itemsLoadedRef.current = true
+    const roomItems = companionLocal.getRoomFurniture()
+    setRoomFurniture(roomItems)
   }, [])
 
   // 代币唯一真实来源：后端数据库。本地不再作为 coins 来源。
-  const refreshCoins = async () => {
+  const refreshCoins = async (force = false) => {
+    // 如果设置了跳过标记且不是强制刷新，直接返回，不覆盖前端刚设置的值
+    if (skipRefreshRef.current && !force) {
+      skipRefreshRef.current = false
+      return
+    }
     try {
       const result = await companionApi.getProfile()
       if (result.user?.coins !== undefined) {
         setCoins(result.user.coins)
+        companionLocal.setCoins(result.user.coins)
         coinsSyncedRef.current = true
         return
       }
@@ -162,13 +204,24 @@ export function CozyRoom() {
     }
     // 从未成功同步过时，给一个默认值；一旦同步过，失败也不覆盖。
     if (!coinsSyncedRef.current) {
-      setCoins(100)
+      const localCoins = companionLocal.getCoins()
+      setCoins(localCoins)
     }
   }
 
+  // 设置跳过刷新标记（在购买后调用，防止 refreshCoins 覆盖刚设置的值）
+  const setSkipRefresh = useCallback(() => {
+    skipRefreshRef.current = true
+    if (skipRefreshTimerRef.current) clearTimeout(skipRefreshTimerRef.current)
+    // 300ms 后自动重置，确保拦截窗口略长于 refreshCoins 执行耗时
+    skipRefreshTimerRef.current = setTimeout(() => {
+      skipRefreshRef.current = false
+    }, 300)
+  }, [])
+
   useEffect(() => {
     refreshCoins()
-    const timer = setInterval(refreshCoins, 30000)
+    const timer = setInterval(() => refreshCoins(), 30000)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -180,6 +233,7 @@ export function CozyRoom() {
     return () => {
       clearInterval(timer)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (skipRefreshTimerRef.current) clearTimeout(skipRefreshTimerRef.current)
     }
   }, [])
 
@@ -198,6 +252,7 @@ export function CozyRoom() {
   // 用 ref 同步可变状态，供自动行走 effect 读取
   const isDraggingRef = useRef(false)
   const isMovingRef = useRef(false)
+  const moveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const catPosRef = useRef(catPos)
   isDraggingRef.current = isDragging
   isMovingRef.current = isMoving
@@ -240,10 +295,22 @@ export function CozyRoom() {
     return () => clearInterval(timer)
   }, [currentCharacter.id])
 
-  // 自动夜间模式
+  // 组件卸载时清理移动定时器
   useEffect(() => {
-    const h = new Date().getHours()
-    setIsNight(h >= 18 || h < 6)
+    return () => {
+      if (moveTimeoutRef.current) {
+        clearTimeout(moveTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // 切换夜晚模式（同时保存用户偏好到本地）
+  const toggleNight = useCallback(() => {
+    setIsNight((v) => {
+      const newValue = !v
+      saveNightPreference(newValue)
+      return newValue
+    })
   }, [])
 
   // 角色自动行走 / 跳跃
@@ -281,6 +348,10 @@ export function CozyRoom() {
   // 猫移动到新位置（点击地板）— 匀速移动，速度固定
   const MOVE_SPEED = 12.5 // 每秒移动的百分比距离（原速度的1/2）
   const moveCatTo = useCallback((x: number, y: number) => {
+    // 防连点：正在移动中忽略后续点击
+    if (isMovingRef.current) return
+    isMovingRef.current = true
+
     const plat = getPlatform(x, y)
     setPlatform(plat)
     const cur = catPosRef.current
@@ -300,10 +371,17 @@ export function CozyRoom() {
     setCatAnim('walk')
     setCatPos({ x, y })
     
+    // 清理之前的定时器
+    if (moveTimeoutRef.current) {
+      clearTimeout(moveTimeoutRef.current)
+    }
+    
     // 使用 setTimeout 检测动画结束，但稍微提前一点以避免闪烁
-    setTimeout(() => {
+    moveTimeoutRef.current = setTimeout(() => {
       setIsMoving(false)
       setCatAnim('idle')
+      isMovingRef.current = false
+      moveTimeoutRef.current = null
     }, duration * 1000 - 50)
   }, [catFacing])
 
@@ -521,40 +599,42 @@ export function CozyRoom() {
           />
         )}
 
-        {/* 预览物品 */}
-        {previewItems.map((item) => (
-          <div
-            key={item.id}
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300"
-            style={{
-              left: `${item.position?.x || 50}%`,
-              top: `${item.position?.y || 50}%`,
-              transform: `translate(-50%, -50%) rotate(${item.rotation || 0}deg)`,
-              opacity: item.hidden ? 0.3 : 1,
-              zIndex: Math.floor((item.position?.y || 50) / 8) + 10,
-            }}
-          >
-            {item.image ? (
-              <img
-                src={item.image}
-                alt={item.name}
-                className="pixelated w-14 object-contain drop-shadow-md"
-              />
-            ) : (
-              <div
-                className="size-14 rounded-xl border-2 border-border/60"
-                style={{ backgroundColor: item.emojiColor }}
-              />
-            )}
-          </div>
-        ))}
+        {/* 房间里的物品 */}
+        {roomFurniture.map((item) => {
+          const tpl = GLOBAL_SHOP_ITEMS[item.templateId] || { name: item.templateId, emojiColor: '#ccc' }
+          return (
+            <div
+              key={item.uniqueId}
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300"
+              style={{
+                left: `${item.x}%`,
+                top: `${item.y}%`,
+                transform: `translate(-50%, -50%) rotate(${item.rotation}deg)`,
+                zIndex: Math.floor(item.y / 8) + 10,
+              }}
+            >
+              {tpl.image ? (
+                <img
+                  src={tpl.image}
+                  alt={tpl.name}
+                  className="pixelated w-14 object-contain drop-shadow-md"
+                />
+              ) : (
+                <div
+                  className="size-14 rounded-xl border-2 border-border/60"
+                  style={{ backgroundColor: tpl.emojiColor }}
+                />
+              )}
+            </div>
+          )
+        })}
 
         {/* ── 透明热区按钮：覆盖在像素画对应物件上 ── */}
 
         {/* 台灯 — 左移 1.5 倍自身宽度(14%×1.5≈21%) 精确贴合像素灯 */}
         <RoomHotspot
           label={isNight ? '开灯' : '关灯'}
-          onClick={() => setIsNight((v) => !v)}
+          onClick={toggleNight}
           style={{ left: '8%', top: '55%' }}
           size="14%"
           uiHidden={uiHidden}
@@ -635,7 +715,9 @@ export function CozyRoom() {
               minWidth: `${100 + (catPos.y - 60) * 0.75}px`,
               maxWidth: '200px',
               transform: `scaleX(${catFacing === 'left' ? -1 : 1})`,
-              transition: 'transform 0.15s ease, width 0.3s ease, min-width 0.3s ease',
+              transition: isMoving
+                ? `transform 0.15s ease, width ${moveDuration}s linear, min-width ${moveDuration}s linear`
+                : 'transform 0.15s ease, width 0.3s ease, min-width 0.3s ease',
               transformOrigin: 'center bottom',
             }}
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${
@@ -692,16 +774,30 @@ export function CozyRoom() {
       </p>
 
       {/* 功能面板 */}
-      <MemoriesPanel open={panel === 'memories'} onClose={() => { setPanel(null); refreshCoins() }} characterId={currentCharacter.id} />
+      <MemoriesPanel
+        open={panel === 'memories'}
+        onClose={() => { setPanel(null); refreshCoins() }}
+        characterId={currentCharacter.id}
+        onImageSaved={() => setAlbumRefreshTrigger(prev => prev + 1)}
+      />
       <ShopPanel
         open={panel === 'shop'}
         onClose={() => { setPanel(null); refreshCoins() }}
-        onPreviewChange={setPreviewItems}
+        onFurnitureChange={(items) => setRoomFurniture(items)}
         coins={coins}
-        onCoinsChange={(newCoins) => setCoins(newCoins)}
+        onCoinsChange={(newCoins) => {
+          setCoins(newCoins)
+          companionLocal.setCoins(newCoins)
+          setSkipRefresh()
+        }}
       />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
-      <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
+      <AlbumPanel
+        open={panel === 'album'}
+        onClose={() => setPanel(null)}
+        characterId={currentCharacter.id}
+        refreshTrigger={albumRefreshTrigger}
+      />
       <CharacterSelector
         open={panel === 'character'}
         onClose={() => setPanel(null)}

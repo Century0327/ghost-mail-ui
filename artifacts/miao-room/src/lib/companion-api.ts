@@ -6,7 +6,7 @@ import type { Letter, Conversation, Attachment } from './companion-local'
 
 const API_BASE = '' // 使用相对路径，走 Vercel rewrite 代理，避免 CORS 问题
 
-function resolveAssetUrl(url: string | undefined | null): string | undefined {
+export function resolveAssetUrl(url: string | undefined | null): string | undefined {
   if (!url) return undefined
   if (url.startsWith('http://') || url.startsWith('https://')) return url
   if (url.startsWith('/')) return `https://random-ai-mail-ghost.vercel.app${url}`

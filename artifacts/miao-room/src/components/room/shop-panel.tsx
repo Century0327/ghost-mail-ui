@@ -1,16 +1,18 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Save, Trash2 } from 'lucide-react'
 import { SHOP_ITEMS, type ShopItem } from '@/lib/companion-data'
-import { companionLocal } from '@/lib/companion-local'
+import { companionLocal, type PlayerFurniture } from '@/lib/companion-local'
 import { companionApi } from '@/lib/companion-api'
 
 type Tab = 'warehouse' | 'shop'
 
-export type InventoryItem = ShopItem & {
-  position?: { x: number; y: number }
-  rotation?: number
-  hidden?: boolean
-}
+// 商品模板字典
+const GLOBAL_SHOP_ITEMS: Record<string, ShopItem> = {}
+SHOP_ITEMS.forEach(item => { GLOBAL_SHOP_ITEMS[item.id] = item })
+// 补充默认物品
+GLOBAL_SHOP_ITEMS['cat_bed'] = { id: 'cat_bed', name: '猫窝', desc: '温暖舒适的猫窝', price: 0, emojiColor: '#e8a87c', image: '/room/item-catbed.png' }
+GLOBAL_SHOP_ITEMS['carpet'] = { id: 'carpet', name: '地毯', desc: '柔软的小地毯', price: 0, emojiColor: '#c9b79c', image: '/room/item-carpet.png' }
+GLOBAL_SHOP_ITEMS['lamp'] = { id: 'lamp', name: '台灯', desc: '温馨的小台灯', price: 0, emojiColor: '#e0b04a', image: '/room/item-lamp.png' }
 
 function ItemIcon({
   item,
@@ -45,110 +47,73 @@ function ItemIcon({
 interface ShopPanelProps {
   open: boolean
   onClose: () => void
-  onPreviewChange?: (items: InventoryItem[]) => void
+  onFurnitureChange?: (items: PlayerFurniture[]) => void
   coins?: number
   onCoinsChange?: (newCoins: number) => void
 }
 
-export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoinsChange }: ShopPanelProps) {
+export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoinsChange }: ShopPanelProps) {
   const [currentTab, setCurrentTab] = useState<Tab>('warehouse')
-  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [furniture, setFurniture] = useState<PlayerFurniture[]>([])
   const [pendingShopItemIds, setPendingShopItemIds] = useState<Set<string>>(new Set())
   const [showReceipt, setShowReceipt] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [isBuying, setIsBuying] = useState(false)
 
-  const inventorySnapshotRef = useRef<InventoryItem[]>([])
+  const furnitureSnapshotRef = useRef<PlayerFurniture[]>([])
   const pendingSnapshotRef = useRef<Set<string>>(new Set())
   const closeTargetRef = useRef<'save' | 'discard' | null>(null)
 
   // 打开时加载数据并保存快照
   useEffect(() => {
     if (!open) return
-    const savedItems = companionLocal.getItems()
-    const savedLayout = companionLocal.getItemsLayout()
-    
-    // 如果有保存的布局，用保存的布局；否则生成默认布局
-    let inv: InventoryItem[]
-    if (savedLayout.length > 0) {
-      inv = savedLayout.map(layout => {
-        const shopItem = SHOP_ITEMS.find(s => s.id === layout.itemId)
-        return {
-          id: layout.id,
-          name: shopItem?.name || layout.itemId,
-          desc: shopItem?.desc || '',
-          price: shopItem?.price || 0,
-          emojiColor: shopItem?.emojiColor || '#ccc',
-          image: shopItem?.image,
-          category: shopItem?.category,
-          position: layout.position,
-          rotation: layout.rotation,
-          hidden: layout.hidden,
-        }
-      })
-    } else {
-      inv = savedItems.map((id, idx) => {
-        const shopItem = SHOP_ITEMS.find(s => s.id === id)
-        return {
-          id: `${id}_${idx}`,
-          name: shopItem?.name || id,
-          desc: shopItem?.desc || '',
-          price: shopItem?.price || 0,
-          emojiColor: shopItem?.emojiColor || '#ccc',
-          image: shopItem?.image,
-          category: shopItem?.category,
-          position: { x: 30 + (idx % 5) * 10, y: 55 + Math.floor(idx / 5) * 8 },
-          rotation: 0,
-          hidden: false,
-        }
-      })
-    }
-    
-    setInventory(inv)
+    const allFurniture = companionLocal.getPlayerFurniture()
+    setFurniture(allFurniture)
     setPendingShopItemIds(new Set())
-    inventorySnapshotRef.current = JSON.parse(JSON.stringify(inv))
+    furnitureSnapshotRef.current = JSON.parse(JSON.stringify(allFurniture))
     pendingSnapshotRef.current = new Set()
     closeTargetRef.current = null
   }, [open])
 
-  // 计算预览物品：仓库中未隐藏的 + 商店中待购买的
-  const previewItems: InventoryItem[] = [
-    ...inventory.filter(item => !item.hidden),
-    ...Array.from(pendingShopItemIds).map((id, idx) => {
-      const shopItem = SHOP_ITEMS.find(s => s.id === id)!
-      return {
-        ...shopItem,
-        id: `pending_${id}_${idx}`,
-        position: { x: 50 + (idx % 3) * 8 - 8, y: 58 + Math.floor(idx / 3) * 8 },
-        rotation: 0,
-        hidden: false,
-      }
-    }),
+  // 计算预览物品：status 为 in_room 的 + 商店中待购买的
+  const roomItems: PlayerFurniture[] = [
+    ...furniture.filter(f => f.status === 'in_room'),
+    ...Array.from(pendingShopItemIds).map((id, idx) => ({
+      uniqueId: `pending_${id}_${idx}`,
+      templateId: id,
+      status: 'in_room' as const,
+      x: 50 + (idx % 3) * 8 - 8,
+      y: 58 + Math.floor(idx / 3) * 8,
+      rotation: 0,
+    })),
   ]
 
-  // 同步预览到父组件
+  // 同步房间物品到父组件
   useEffect(() => {
-    if (!onPreviewChange) return
-    onPreviewChange(previewItems)
-  }, [previewItems, onPreviewChange])
+    if (!onFurnitureChange) return
+    onFurnitureChange(roomItems)
+  }, [roomItems, onFurnitureChange])
 
   // 计算待花费代币
   const pendingTotal = Array.from(pendingShopItemIds).reduce((sum, id) => {
-    const item = SHOP_ITEMS.find(s => s.id === id)
+    const item = GLOBAL_SHOP_ITEMS[id]
     return sum + (item?.price || 0)
   }, 0)
 
   // 检查是否有未保存的更改
   const hasUnsavedChanges = useCallback(() => {
-    const invChanged = JSON.stringify(inventory) !== JSON.stringify(inventorySnapshotRef.current)
+    const furChanged = JSON.stringify(furniture) !== JSON.stringify(furnitureSnapshotRef.current)
     const pendingChanged = Array.from(pendingShopItemIds).sort().join(',') !== Array.from(pendingSnapshotRef.current).sort().join(',')
-    return invChanged || pendingChanged
-  }, [inventory, pendingShopItemIds])
+    return furChanged || pendingChanged
+  }, [furniture, pendingShopItemIds])
 
-  // 仓库物品点击：切换显示/隐藏
-  const toggleWarehouseItem = useCallback((item: InventoryItem) => {
-    setInventory(prev =>
-      prev.map(i => i.id === item.id ? { ...i, hidden: !i.hidden } : i)
+  // 仓库物品点击：切换显示/隐藏（in_room <-> in_bag）
+  const toggleWarehouseItem = useCallback((item: PlayerFurniture) => {
+    setFurniture(prev =>
+      prev.map(f => f.uniqueId === item.uniqueId
+        ? { ...f, status: f.status === 'in_room' ? 'in_bag' : 'in_room' }
+        : f
+      )
     )
   }, [])
 
@@ -166,36 +131,23 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
   }, [])
 
   // 旋转物品
-  const handleRotate = useCallback((itemId: string) => {
-    setInventory(prev =>
-      prev.map(i => i.id === itemId ? { ...i, rotation: ((i.rotation || 0) + 90) % 360 } : i)
+  const handleRotate = useCallback((uniqueId: string) => {
+    setFurniture(prev =>
+      prev.map(f => f.uniqueId === uniqueId ? { ...f, rotation: (f.rotation + 90) % 360 } : f)
     )
   }, [])
 
   // 移除仓库物品
-  const handleRemove = useCallback((itemId: string) => {
-    setInventory(prev => prev.filter(i => i.id !== itemId))
+  const handleRemove = useCallback((uniqueId: string) => {
+    setFurniture(prev => prev.filter(f => f.uniqueId !== uniqueId))
   }, [])
 
   // 保存当前状态（仅显示/隐藏，不涉及代币）
   const saveLayoutOnly = useCallback(() => {
-    const newInv = [...inventory]
-    // 保存布局到 localStorage
-    const layout = newInv.map(item => ({
-      id: item.id,
-      itemId: item.id.split('_')[0],
-      position: item.position || { x: 50, y: 50 },
-      rotation: item.rotation || 0,
-      hidden: item.hidden || false,
-    }))
-    companionLocal.saveItemsLayout(layout)
-    // 同时更新物品列表（确保新购买的物品也被保存）
-    const itemIds = Array.from(new Set(newInv.map(i => i.id.split('_')[0])))
-    itemIds.forEach(id => companionLocal.addItem(id))
-    
-    inventorySnapshotRef.current = JSON.parse(JSON.stringify(newInv))
+    companionLocal.saveFurniture(furniture)
+    furnitureSnapshotRef.current = JSON.parse(JSON.stringify(furniture))
     pendingSnapshotRef.current = new Set(pendingShopItemIds)
-  }, [inventory, pendingShopItemIds])
+  }, [furniture, pendingShopItemIds])
 
   // 执行购买
   const doPurchase = useCallback(async () => {
@@ -209,29 +161,24 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
       const items = Array.from(pendingShopItemIds).map(id => ({
         item_id: id,
         quantity: 1,
-        price: SHOP_ITEMS.find(s => s.id === id)?.price || 0,
+        price: GLOBAL_SHOP_ITEMS[id]?.price || 0,
       }))
       const result = await companionApi.buyItems(items)
       if (result.status === 'ok') {
-        // 计算新的仓库物品：原来的 + 新购买的
-        const newItems: InventoryItem[] = Array.from(pendingShopItemIds).map((id, idx) => {
-          const shopItem = SHOP_ITEMS.find(s => s.id === id)!
-          return {
-            ...shopItem,
-            id: `${id}_${Date.now()}_${idx}`,
-            position: { x: 50 + (idx % 3) * 8 - 8, y: 58 + Math.floor(idx / 3) * 8 },
-            rotation: 0,
-            hidden: false,
-          }
-        })
-        const newInv = [...inventory, ...newItems]
-        setInventory(newInv)
+        // 新购买的物品
+        const newItems: PlayerFurniture[] = Array.from(pendingShopItemIds).map((id, idx) => ({
+          uniqueId: `${id}_${Date.now()}_${idx}`,
+          templateId: id,
+          status: 'in_room' as const,
+          x: 50 + (idx % 3) * 8 - 8,
+          y: 58 + Math.floor(idx / 3) * 8,
+          rotation: 0,
+        }))
+        const newFur = [...furniture, ...newItems]
+        setFurniture(newFur)
 
         // 更新本地存储
-        newInv.forEach(item => {
-          const baseId = item.id.split('_')[0]
-          companionLocal.addItem(baseId)
-        })
+        companionLocal.saveFurniture(newFur)
 
         // 更新代币
         const newCoins = result.coins ?? (coins - pendingTotal)
@@ -242,7 +189,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
         setPendingShopItemIds(new Set())
 
         // 更新快照
-        inventorySnapshotRef.current = JSON.parse(JSON.stringify(newInv))
+        furnitureSnapshotRef.current = JSON.parse(JSON.stringify(newFur))
         pendingSnapshotRef.current = new Set()
 
         return true
@@ -257,7 +204,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
     } finally {
       setIsBuying(false)
     }
-  }, [pendingShopItemIds, inventory, coins, pendingTotal, onCoinsChange, saveLayoutOnly])
+  }, [pendingShopItemIds, furniture, coins, pendingTotal, onCoinsChange, saveLayoutOnly])
 
   // 点击保存按钮
   const handleSave = useCallback(() => {
@@ -301,7 +248,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
   // 未保存对话框：直接退出
   const handleDiscardAndClose = useCallback(() => {
     // 恢复快照
-    setInventory(JSON.parse(JSON.stringify(inventorySnapshotRef.current)))
+    setFurniture(JSON.parse(JSON.stringify(furnitureSnapshotRef.current)))
     setPendingShopItemIds(new Set(pendingSnapshotRef.current))
     setShowUnsavedDialog(false)
     onClose()
@@ -338,8 +285,8 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
               >
                 <Package className="size-5" />
                 仓库
-                {inventory.length > 0 && (
-                  <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-primary">{inventory.length}</span>
+                {furniture.length > 0 && (
+                  <span className="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-primary">{furniture.length}</span>
                 )}
               </button>
               <button
@@ -375,7 +322,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
 
             <div className="overflow-y-auto px-4 py-4 scrollbar-hide flex-1">
               {currentTab === 'warehouse' ? (
-                inventory.length === 0 ? (
+                furniture.length === 0 ? (
                   <div className="flex min-h-32 flex-col items-center justify-center py-8 text-center">
                     <span className="mb-3 flex size-14 items-center justify-center rounded-full bg-secondary/50">
                       <Package className="size-7 text-muted-foreground" />
@@ -385,12 +332,13 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
                   </div>
                 ) : (
                   <div className="grid grid-cols-4 gap-3 pb-2 sm:grid-cols-6">
-                    {inventory.map((item) => {
-                    const isShowing = !item.hidden
+                    {furniture.map((f) => {
+                    const tpl = GLOBAL_SHOP_ITEMS[f.templateId] || { name: f.templateId, emojiColor: '#ccc', price: 0 }
+                    const isShowing = f.status === 'in_room'
                     return (
                       <div
-                        key={item.id}
-                        onClick={() => toggleWarehouseItem(item)}
+                        key={f.uniqueId}
+                        onClick={() => toggleWarehouseItem(f)}
                         className={`relative flex cursor-pointer flex-col items-center rounded-2xl border-2 p-2.5 transition-all ${
                           isShowing
                             ? 'border-primary bg-primary/10 shadow-md scale-[1.02]'
@@ -402,28 +350,28 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
                             <Eye className="size-3" />
                           </span>
                         )}
-                        <div style={{ transform: `rotate(${item.rotation || 0}deg)`, transition: 'transform 0.3s' }}>
-                          <ItemIcon item={item} size="sm" />
+                        <div style={{ transform: `rotate(${f.rotation}deg)`, transition: 'transform 0.3s' }}>
+                          <ItemIcon item={tpl} size="sm" />
                         </div>
-                        <p className="mt-1.5 w-full truncate text-center font-pixel text-[10px] text-foreground">{item.name}</p>
+                        <p className="mt-1.5 w-full truncate text-center font-pixel text-[10px] text-foreground">{tpl.name}</p>
                         
                         <div className="mt-1.5 flex w-full gap-0.5">
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleRotate(item.id); }}
+                            onClick={(e) => { e.stopPropagation(); handleRotate(f.uniqueId); }}
                             title="旋转"
                             className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
                           >
                             <RotateCw className="size-3 text-muted-foreground" />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); toggleWarehouseItem(item); }}
-                            title={item.hidden ? '显示' : '隐藏'}
+                            onClick={(e) => { e.stopPropagation(); toggleWarehouseItem(f); }}
+                            title={isShowing ? '隐藏' : '显示'}
                             className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
                           >
-                            {item.hidden ? <Eye className="size-3 text-muted-foreground" /> : <EyeOff className="size-3 text-muted-foreground" />}
+                            {isShowing ? <EyeOff className="size-3 text-muted-foreground" /> : <Eye className="size-3 text-muted-foreground" />}
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
+                            onClick={(e) => { e.stopPropagation(); handleRemove(f.uniqueId); }}
                             title="移除"
                             className="flex flex-1 items-center justify-center rounded-md bg-red-100 py-1 transition hover:bg-red-200"
                           >
@@ -490,7 +438,7 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
                 ) : (
                   <>
                     <p className="font-pixel text-xs text-muted-foreground">
-                    调整显示中的物品 {inventory.filter(i => !i.hidden).length} 件
+                    调整显示中的物品 {furniture.filter(f => f.status === 'in_room').length} 件
                     </p>
                   </>
                 )}
@@ -525,18 +473,18 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoins
               {pendingTotal > 0 ? (
                 <div className="space-y-2">
                   {Array.from(pendingShopItemIds).map(id => {
-                  const item = SHOP_ITEMS.find(s => s.id === id)!
+                  const item = GLOBAL_SHOP_ITEMS[id]
                   return (
                     <div key={id} className="flex items-center justify-between">
-                      <span className="font-pixel text-xs text-foreground">{item.name}</span>
-                      <span className="font-pixel text-xs text-muted-foreground">🥫 {item.price}</span>
+                      <span className="font-pixel text-xs text-foreground">{item?.name || id}</span>
+                      <span className="font-pixel text-xs text-muted-foreground">🥫 {item?.price || 0}</span>
                     </div>
                   )
                 })}
                 </div>
               ) : (
                 <p className="py-4 text-center font-pixel text-xs text-muted-foreground">
-                  共 {inventory.filter(i => !i.hidden).length} 件物品已摆放
+                  共 {furniture.filter(f => f.status === 'in_room').length} 件物品已摆放
                 </p>
               )}
               

@@ -7,8 +7,7 @@ const LS_SCHEDULE_HISTORY_KEY = 'ghost_schedule_history'
 export interface CompanionState {
   deviceId: string
   characters: Record<string, CharacterLocalState>
-  items: string[] // 拥有的物品 ID
-  itemsLayout: ItemLayout[] // 物品布局信息
+  playerFurniture: PlayerFurniture[] // 玩家家具（合并了 items + itemsLayout）
   coins: number // 罐罐代币
   letters: Letter[]
   conversations: Conversation[]
@@ -16,12 +15,26 @@ export interface CompanionState {
   lastSync?: number
 }
 
-export interface ItemLayout {
-  id: string // 物品唯一ID（包含序号后缀）
-  itemId: string // 基础物品ID
-  position: { x: number; y: number }
-  rotation: number
-  hidden: boolean
+export type FurnitureStatus = 'in_bag' | 'in_room'
+
+export interface PlayerFurniture {
+  uniqueId: string // 唯一ID
+  templateId: string // 商品模板ID（对应 globalShopItems 的 id）
+  status: FurnitureStatus // in_bag: 在仓库 in_room: 在房间
+  x: number // 位置x（百分比）
+  y: number // 位置y（百分比）
+  rotation: number // 旋转角度
+}
+
+// 商品模板（即 globalShopItems 字典中的单条记录）
+export interface ShopItemTemplate {
+  id: string
+  name: string
+  desc: string
+  price: number
+  emojiColor: string
+  image?: string
+  category?: string
 }
 
 export interface CharacterLocalState {
@@ -165,11 +178,16 @@ export const companionLocal = {
     if (typeof window !== 'undefined') {
       localStorage.setItem('ghost_device_id', deviceId)
     }
+    // 默认物品：初始3件，状态都是 in_room
+    const defaultFurniture: PlayerFurniture[] = [
+      { uniqueId: 'init_cat_bed', templateId: 'cat_bed', status: 'in_room', x: 20, y: 70, rotation: 0 },
+      { uniqueId: 'init_carpet', templateId: 'carpet', status: 'in_room', x: 50, y: 75, rotation: 0 },
+      { uniqueId: 'init_lamp', templateId: 'lamp', status: 'in_room', x: 80, y: 55, rotation: 0 },
+    ]
     return {
       deviceId,
       characters: {},
-      items: ['cat_bed', 'carpet', 'lamp'],
-      itemsLayout: [],
+      playerFurniture: defaultFurniture,
       coins: 100,
       letters: [],
       conversations: [],
@@ -179,12 +197,40 @@ export const companionLocal = {
 
   ensureDefaults(state: CompanionState): CompanionState {
     const defaults = this.getDefaultState()
+    // 兼容旧数据：如果有 items/itemsLayout 但没有 playerFurniture，迁移过来
+    let furniture = state.playerFurniture
+    if (!furniture || furniture.length === 0) {
+      const oldItems = (state as any).items as string[] | undefined
+      const oldLayout = (state as any).itemsLayout as any[] | undefined
+      if (oldItems && oldItems.length > 0) {
+        if (oldLayout && oldLayout.length > 0) {
+          furniture = oldLayout.map(l => ({
+            uniqueId: l.id,
+            templateId: l.itemId,
+            status: (l.hidden ? 'in_bag' : 'in_room') as FurnitureStatus,
+            x: l.position?.x ?? 50,
+            y: l.position?.y ?? 50,
+            rotation: l.rotation ?? 0,
+          }))
+        } else {
+          furniture = oldItems.map((id, idx) => ({
+            uniqueId: `${id}_${idx}`,
+            templateId: id,
+            status: 'in_room' as FurnitureStatus,
+            x: 30 + (idx % 5) * 10,
+            y: 55 + Math.floor(idx / 5) * 8,
+            rotation: 0,
+          }))
+        }
+      } else {
+        furniture = defaults.playerFurniture
+      }
+    }
     return {
       ...defaults,
       ...state,
       characters: state.characters || {},
-      items: state.items || defaults.items,
-      itemsLayout: state.itemsLayout || [],
+      playerFurniture: furniture,
       coins: state.coins ?? defaults.coins,
       letters: state.letters || [],
       conversations: state.conversations || [],
@@ -456,29 +502,70 @@ export const companionLocal = {
     return state.conversations
   },
 
-  // ==================== 物品 ====================
+  // ==================== 物品（playerFurniture）====================
 
-  getItems(): string[] {
-    return this.getState().items
+  // 获取所有家具
+  getPlayerFurniture(): PlayerFurniture[] {
+    return this.getState().playerFurniture
   },
 
-  addItem(itemId: string): void {
+  // 获取在房间里的家具
+  getRoomFurniture(): PlayerFurniture[] {
+    return this.getState().playerFurniture.filter(f => f.status === 'in_room')
+  },
+
+  // 获取在仓库里的家具
+  getBagFurniture(): PlayerFurniture[] {
+    return this.getState().playerFurniture.filter(f => f.status === 'in_bag')
+  },
+
+  // 批量添加新家具（购买时用）
+  addFurniture(items: { templateId: string; x: number; y: number }[]): PlayerFurniture[] {
     const state = this.getState()
-    if (!state.items.includes(itemId)) {
-      state.items.push(itemId)
+    const newItems: PlayerFurniture[] = items.map((it, idx) => ({
+      uniqueId: `${it.templateId}_${Date.now()}_${idx}`,
+      templateId: it.templateId,
+      status: 'in_room',
+      x: it.x,
+      y: it.y,
+      rotation: 0,
+    }))
+    state.playerFurniture = [...state.playerFurniture, ...newItems]
+    this.saveState(state)
+    return newItems
+  },
+
+  // 更新单个家具
+  updateFurniture(uniqueId: string, updates: Partial<PlayerFurniture>): void {
+    const state = this.getState()
+    const idx = state.playerFurniture.findIndex(f => f.uniqueId === uniqueId)
+    if (idx >= 0) {
+      state.playerFurniture[idx] = { ...state.playerFurniture[idx], ...updates }
       this.saveState(state)
     }
   },
 
-  // 获取物品布局
-  getItemsLayout(): ItemLayout[] {
-    return this.getState().itemsLayout
+  // 切换家具显示/隐藏状态（in_room <-> in_bag）
+  toggleFurnitureStatus(uniqueId: string): void {
+    const state = this.getState()
+    const item = state.playerFurniture.find(f => f.uniqueId === uniqueId)
+    if (item) {
+      item.status = item.status === 'in_room' ? 'in_bag' : 'in_room'
+      this.saveState(state)
+    }
   },
 
-  // 保存物品布局
-  saveItemsLayout(layout: ItemLayout[]): void {
+  // 移除家具
+  removeFurniture(uniqueId: string): void {
     const state = this.getState()
-    state.itemsLayout = layout
+    state.playerFurniture = state.playerFurniture.filter(f => f.uniqueId !== uniqueId)
+    this.saveState(state)
+  },
+
+  // 全量保存家具（批量更新用）
+  saveFurniture(furniture: PlayerFurniture[]): void {
+    const state = this.getState()
+    state.playerFurniture = furniture
     this.saveState(state)
   },
 

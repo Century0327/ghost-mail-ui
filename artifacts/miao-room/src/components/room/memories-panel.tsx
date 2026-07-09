@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mail, ChevronLeft, Heart, Star, Calendar, Image, ZoomIn, Check } from 'lucide-react'
 import { Panel } from './panel'
-import { companionApi } from '@/lib/companion-api'
+import { companionApi, resolveAssetUrl } from '@/lib/companion-api'
 import { companionLocal } from '@/lib/companion-local'
 import { cleanLetterBody, extractImagesFromHtml, formatLetterPreview } from '@/lib/letter-utils'
 
@@ -17,6 +17,13 @@ interface DisplayLetter {
   category: LetterCategory
 }
 
+interface MemoriesPanelProps {
+  open: boolean
+  onClose: () => void
+  characterId?: string
+  onImageSaved?: () => void
+}
+
 const TABS: { key: LetterCategory; label: string; icon: typeof Mail }[] = [
   { key: 'all', label: '全部', icon: Mail },
   { key: 'favorite', label: '收藏', icon: Heart },
@@ -25,7 +32,7 @@ const TABS: { key: LetterCategory; label: string; icon: typeof Mail }[] = [
 
 const PAGE_SIZE = 5
 
-export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open: boolean; onClose: () => void; characterId?: string }) {
+export function MemoriesPanel({ open, onClose, characterId = 'maodie', onImageSaved }: MemoriesPanelProps) {
   const [active, setActive] = useState<DisplayLetter | null>(null)
   const [currentTab, setCurrentTab] = useState<LetterCategory>('all')
   const [zoomed, setZoomed] = useState(false)
@@ -75,11 +82,18 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
         
         const rawBody = l.body || ''
         const images: string[] = []
-        if (l.attachmentUrl) images.push(l.attachmentUrl)
-        if (l.attachment_url) images.push(l.attachment_url)
+        if (l.attachmentUrl) {
+          const resolved = resolveAssetUrl(l.attachmentUrl)
+          if (resolved) images.push(resolved)
+        }
+        if (l.attachment_url) {
+          const resolved = resolveAssetUrl(l.attachment_url)
+          if (resolved && !images.includes(resolved)) images.push(resolved)
+        }
         const extracted = extractImagesFromHtml(rawBody)
         extracted.forEach(img => {
-          if (!images.includes(img)) images.push(img)
+          const resolved = resolveAssetUrl(img)
+          if (resolved && !images.includes(resolved)) images.push(resolved)
         })
         
         return {
@@ -96,15 +110,22 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     } catch (err) {
       console.error('Failed to load letters:', err)
       const localLetters = companionLocal.getLetters(characterId)
-      setAllLetters(localLetters.map((l: any) => ({
-        id: l.id,
-        title: l.subject || '无标题',
-        date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-        preview: formatLetterPreview(l.body || '', 30),
-        body: cleanLetterBody(l.body || ''),
-        images: l.attachmentUrl ? [l.attachmentUrl] : [],
-        category: (l.isFavorite ? 'favorite' : 'all') as LetterCategory,
-      })))
+      setAllLetters(localLetters.map((l: any) => {
+        const imgs: string[] = []
+        if (l.attachmentUrl) {
+          const resolved = resolveAssetUrl(l.attachmentUrl)
+          if (resolved) imgs.push(resolved)
+        }
+        return {
+          id: l.id,
+          title: l.subject || '无标题',
+          date: l.createdAt ? new Date(l.createdAt).toLocaleDateString('zh-CN') : '未知日期',
+          preview: formatLetterPreview(l.body || '', 30),
+          body: cleanLetterBody(l.body || ''),
+          images: imgs,
+          category: (l.isFavorite ? 'favorite' : 'all') as LetterCategory,
+        }
+      }))
     } finally {
       setLoading(false)
     }
@@ -185,6 +206,8 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     } finally {
       setSavingToAlbum(false)
       setTimeout(() => setAlbumAnimating(false), 600)
+      // 通知父组件相册有新内容，需要刷新
+      onImageSaved?.()
     }
   }
 

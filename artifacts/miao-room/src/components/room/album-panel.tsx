@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Image, X, Heart, ZoomIn, ChevronLeft, Trash2 } from 'lucide-react'
 import { Panel } from './panel'
-import { companionApi } from '@/lib/companion-api'
+import { companionApi, resolveAssetUrl } from '@/lib/companion-api'
 import { companionLocal } from '@/lib/companion-local'
 
 export type AlbumImage = {
@@ -12,7 +12,14 @@ export type AlbumImage = {
   fromLetter?: string
 }
 
-export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: boolean; onClose: () => void; characterId?: string }) {
+interface AlbumPanelProps {
+  open: boolean
+  onClose: () => void
+  characterId?: string
+  refreshTrigger?: number
+}
+
+export function AlbumPanel({ open, onClose, characterId = 'maodie', refreshTrigger = 0 }: AlbumPanelProps) {
   const [selectedImage, setSelectedImage] = useState<AlbumImage | null>(null)
   const [zoomed, setZoomed] = useState(false)
   const [images, setImages] = useState<AlbumImage[]>([])
@@ -26,7 +33,7 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
   useEffect(() => {
     if (!open) return
     loadImages()
-  }, [open, characterId])
+  }, [open, characterId, refreshTrigger])
 
   const loadImages = async () => {
     setLoading(true)
@@ -34,7 +41,7 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
       const result = await companionApi.getAttachments(characterId)
       const mapped = (result.attachments || []).map((a: any) => ({
         id: a.id || a.src,
-        src: a.src || a.attachment_url || '',
+        src: resolveAssetUrl(a.src || a.attachment_url || '') || '',
         title: a.title || '美好瞬间',
         date: a.createdAt
           ? new Date(a.createdAt).toLocaleDateString('zh-CN')
@@ -47,7 +54,7 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
       const localAttachments = companionLocal.getAttachments(characterId)
       setImages(localAttachments.map(a => ({
         id: a.id,
-        src: a.src,
+        src: resolveAssetUrl(a.src) || '',
         title: a.title || '美好瞬间',
         date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : '未知日期',
         fromLetter: a.letterId,
