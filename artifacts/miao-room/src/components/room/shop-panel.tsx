@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Save, Trash2, Plus, Minus, ShoppingCart } from 'lucide-react'
 import { SHOP_ITEMS, type ShopItem } from '@/lib/companion-data'
 import { companionLocal } from '@/lib/companion-local'
+import { companionApi } from '@/lib/companion-api'
 
 type Tab = 'warehouse' | 'shop' | 'cart'
 
@@ -52,14 +53,14 @@ interface ShopPanelProps {
   open: boolean
   onClose: () => void
   onPreviewChange?: (items: InventoryItem[]) => void
+  coins?: number
 }
 
-export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
+export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopPanelProps) {
   const [currentTab, setCurrentTab] = useState<Tab>('warehouse')
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showReceipt, setShowReceipt] = useState(false)
-  const [coins, setCoins] = useState(100)
   const [cart, setCart] = useState<CartItem[]>([])
 
   useEffect(() => {
@@ -82,7 +83,6 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
     })
     setInventory(inv)
     setSelectedIds(new Set())
-    setCoins(companionLocal.getCoins?.() || 100)
     setCart([])
   }, [open])
 
@@ -149,8 +149,21 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
   const canAffordCart = coins >= cartTotal
 
-  const handleCheckout = useCallback(() => {
+  const handleCheckout = useCallback(async () => {
     if (!canAffordCart || cart.length === 0) return
+
+    // 调用后端 API 逐个购买（购物车同步扣减）
+    try {
+      for (const item of cart) {
+        for (let i = 0; i < item.quantity; i++) {
+          await companionApi.buyItem(item.id, item.price)
+        }
+      }
+    } catch (err) {
+      console.error('购买失败:', err)
+      alert('购买失败，请稍后重试')
+      return
+    }
 
     const newInventoryItems: InventoryItem[] = []
     cart.forEach(item => {
@@ -169,8 +182,6 @@ export function ShopPanel({ open, onClose, onPreviewChange }: ShopPanelProps) {
     })
 
     setInventory(prev => [...prev, ...newInventoryItems])
-    setCoins(prev => prev - cartTotal)
-    companionLocal.setCoins?.(coins - cartTotal)
     setCart([])
     setCurrentTab('warehouse')
   }, [cart, coins, canAffordCart])

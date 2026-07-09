@@ -186,60 +186,63 @@ export const companionApi = {
     return Promise.resolve({ status: 'ok', message: 'Conversation recorded locally' })
   },
 
-  // ========== 附件/相册（后端 API + 本地缓存） ==========
+  // ========== 附件/相册（后端为唯一真实来源，本地仅兜底缓存） ==========
 
   getAttachments: async (characterId?: string): Promise<{ attachments: Attachment[] }> => {
     try {
       const query = characterId ? `?character_id=${characterId}` : ''
       const result = await apiFetch(`/api/companion/attachments${query}`)
-      if (result.attachments?.length) {
-        const state = companionLocal.getState()
-        const existingIds = new Set(state.attachments.map((a) => a.id))
-        for (const att of result.attachments) {
-          if (!existingIds.has(att.id)) {
-            companionLocal.addAttachment({
-              letterId: att.letter_id,
-              characterId: att.character_id || characterId || 'maodie',
-              src: att.src,
-              title: att.title,
-              createdAt: att.created_at,
-            })
-          }
-        }
-      }
-      return { attachments: companionLocal.getAttachments(characterId) }
+      const attachments: Attachment[] = (result.attachments || []).map((att: any) => ({
+        id: att.id,
+        letterId: att.letter_id,
+        characterId: att.character_id || characterId || 'maodie',
+        src: att.src,
+        title: att.title,
+        createdAt: att.created_at,
+      }))
+      // 同步到本地缓存
+      companionLocal.replaceAttachments(characterId, attachments)
+      return { attachments }
     } catch {
       return { attachments: companionLocal.getAttachments(characterId) }
     }
   },
 
-  // ========== 用户资料与代币（后端优先，本地兜底） ==========
-
-  getProfile: async (): Promise<{ user?: { id: number; steam_id: string; steam_name: string; coins: number; tier: string } }> => {
-    const result = await apiFetch('/api/auth/profile')
-    if (result.user?.coins !== undefined) {
-      companionLocal.setCoins(result.user.coins)
+  createAttachment: async (data: {
+    character_id: string
+    src: string
+    title?: string
+    letter_id?: string
+  }): Promise<{ status: string; attachment?: Attachment }> => {
+    const result = await apiFetch('/api/companion/attachments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+    if (result.attachment) {
+      companionLocal.addAttachment({
+        letterId: data.letter_id,
+        characterId: data.character_id,
+        src: data.src,
+        title: data.title || '',
+        createdAt: new Date().toISOString(),
+      })
     }
     return result
   },
 
+  // ========== 用户资料与代币（唯一真实来源：后端数据库） ==========
+
+  getProfile: async (): Promise<{ user?: { id: number; steam_id: string; steam_name: string; coins: number; tier: string } }> => {
+    const result = await apiFetch('/api/auth/profile')
+    return result
+  },
+
   buyItem: async (itemId: string, price: number): Promise<{ status: string; coins?: number }> => {
-    try {
-      const result = await apiFetch(`/api/companion/user/items/${itemId}/buy`, {
-        method: 'POST',
-        body: JSON.stringify({ price }),
-      })
-      if (result.coins !== undefined) {
-        companionLocal.setCoins(result.coins)
-      }
-      return result
-    } catch {
-      const coins = companionLocal.getCoins()
-      if (coins < price) throw new Error('金币不足')
-      companionLocal.setCoins(coins - price)
-      companionLocal.addItem(itemId)
-      return { status: 'ok', coins: coins - price }
-    }
+    const result = await apiFetch(`/api/companion/user/items/${itemId}/buy`, {
+      method: 'POST',
+      body: JSON.stringify({ price }),
+    })
+    return result
   },
 
   // ========== AI 日程生成 ==========

@@ -122,35 +122,31 @@ export function CozyRoom() {
   const [previewItems, setPreviewItems] = useState<InventoryItem[]>([])
   const coinsSyncedRef = useRef(false)
 
-  // 加载代币数据（后端优先，成功后不再被本地值覆盖）
-  const refreshCoins = async (force = false) => {
-    if (coinsSyncedRef.current && !force) return true
+  // 代币唯一真实来源：后端数据库。本地不再作为 coins 来源。
+  const refreshCoins = async () => {
     try {
       const result = await companionApi.getProfile()
       if (result.user?.coins !== undefined) {
         setCoins(result.user.coins)
         coinsSyncedRef.current = true
-        return true
+        return
       }
     } catch (err) {
       console.error('[CozyRoom] 同步代币失败:', err)
     }
-    // 只有从未成功同步过时才使用本地兜底
+    // 从未成功同步过时，给一个默认值；一旦同步过，失败也不覆盖。
     if (!coinsSyncedRef.current) {
-      setCoins(companionLocal.getCoins?.() || 100)
+      setCoins(100)
     }
-    return false
   }
 
   useEffect(() => {
     refreshCoins()
-    // 每60秒刷新一次代币（频率降低，避免竞态）
-    const timer = setInterval(() => refreshCoins(true), 60000)
+    const timer = setInterval(refreshCoins, 30000)
 
-    // 页面可见性变化时刷新（用户切回标签页时）
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        refreshCoins(true)
+        refreshCoins()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -670,11 +666,12 @@ export function CozyRoom() {
       </p>
 
       {/* 功能面板 */}
-      <MemoriesPanel open={panel === 'memories'} onClose={() => { setPanel(null); refreshCoins(true) }} characterId={currentCharacter.id} />
+      <MemoriesPanel open={panel === 'memories'} onClose={() => { setPanel(null); refreshCoins() }} characterId={currentCharacter.id} />
       <ShopPanel
         open={panel === 'shop'}
-        onClose={() => { setPanel(null); refreshCoins(true) }}
+        onClose={() => { setPanel(null); refreshCoins() }}
         onPreviewChange={setPreviewItems}
+        coins={coins}
       />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
       <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Image, X, Heart, ZoomIn, ChevronLeft } from 'lucide-react'
+import { Image, X, Heart, ZoomIn, ChevronLeft, Trash2 } from 'lucide-react'
 import { Panel } from './panel'
 import { companionApi } from '@/lib/companion-api'
 import { companionLocal } from '@/lib/companion-local'
@@ -32,41 +32,26 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
     setLoading(true)
     try {
       const result = await companionApi.getAttachments(characterId)
-      const apiImages = result.attachments.map((a: any) => ({
-        id: a.id,
+      const mapped = (result.attachments || []).map((a: any) => ({
+        id: a.id || a.src,
         src: a.src || a.attachment_url || '',
         title: a.title || '美好瞬间',
-        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : (a.created_at ? new Date(a.created_at).toLocaleDateString('zh-CN') : '未知日期'),
+        date: a.createdAt
+          ? new Date(a.createdAt).toLocaleDateString('zh-CN')
+          : (a.created_at ? new Date(a.created_at).toLocaleDateString('zh-CN') : '未知日期'),
         fromLetter: a.letterId || a.letter_id,
       }))
-      
-      const localAttachments = companionLocal.getAttachments(characterId)
-      const localImages = localAttachments.map(a => ({
-        id: a.id,
-        src: a.src,
-        title: a.title || '美好瞬间',
-        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : '未知日期',
-        fromLetter: a.letterId,
-      }))
-      
-      const allImages = [...apiImages]
-      localImages.forEach(img => {
-        if (!allImages.find(i => i.src === img.src)) allImages.push(img)
-      })
-      
-      setImages(allImages)
+      setImages(mapped)
     } catch (err) {
       console.error('Failed to load attachments:', err)
       const localAttachments = companionLocal.getAttachments(characterId)
-      const localImages = localAttachments.map(a => ({
+      setImages(localAttachments.map(a => ({
         id: a.id,
         src: a.src,
         title: a.title || '美好瞬间',
         date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('zh-CN') : '未知日期',
         fromLetter: a.letterId,
-      }))
-      
-      setImages(localImages)
+      })))
     } finally {
       setLoading(false)
     }
@@ -76,6 +61,18 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
     setSelectedImage(null)
     setZoomed(false)
     onClose()
+  }
+
+  const handleDelete = async (img: AlbumImage, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm('确定要删除这张图片吗？')) return
+    // 本地删除（后端暂无删除接口，先保证 UI 可用）
+    companionLocal.deleteAttachment?.(img.id)
+    setImages(prev => prev.filter(i => i.id !== img.id))
+    if (selectedImage?.id === img.id) {
+      setSelectedImage(null)
+      setZoomed(false)
+    }
   }
 
   if (loading) {
@@ -91,36 +88,27 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
     )
   }
 
-  if (images.length === 0) {
-    return (
-      <Panel open={open} onClose={handleClose} title="我的相册" icon={<Image className="size-5" />}>
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <span className="mb-4 flex size-20 items-center justify-center rounded-full bg-secondary/50">
-            <Image className="size-10 text-muted-foreground" />
-          </span>
-          <p className="font-cute text-base text-muted-foreground">空空如也~</p>
-          <p className="mt-2 text-sm text-muted-foreground/70">在记忆信件里收藏图片，会在这里显示哦</p>
-        </div>
-      </Panel>
-    )
-  }
-
   return (
     <Panel open={open} onClose={handleClose} title="我的相册" icon={<Image className="size-5" />}>
       {selectedImage ? (
         <div className="animate-bubble-in">
-          <button
-            onClick={() => {
-              if (zoomed) {
-                setZoomed(false)
-              } else {
-                setSelectedImage(null)
-              }
-            }}
-            className="mb-3 inline-flex items-center gap-1 rounded-full bg-secondary/70 px-3 py-1.5 font-cute text-sm text-secondary-foreground transition-colors hover:bg-secondary"
-          >
-            <ChevronLeft className="size-4" /> {zoomed ? '返回列表' : '返回'}
-          </button>
+          <div className="mb-3 flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (zoomed) {
+                  setZoomed(false)
+                } else {
+                  setSelectedImage(null)
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded-full bg-secondary/70 px-3 py-1.5 font-cute text-sm text-secondary-foreground transition-colors hover:bg-secondary"
+            >
+              <ChevronLeft className="size-4" /> {zoomed ? '返回列表' : '返回'}
+            </button>
+            <span className="font-cute text-sm text-muted-foreground">
+              {images.findIndex(i => i.id === selectedImage.id) + 1} / {images.length}
+            </span>
+          </div>
 
           <div
             className={`relative overflow-hidden rounded-3xl border-2 border-border bg-background/60 ${
@@ -160,26 +148,41 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
                 <p className="mt-2 text-xs text-primary/80">来自: 记忆信件</p>
               )}
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-              }}
-              className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-primary transition-colors hover:bg-primary/20"
-            >
-              <Heart className="size-4 fill-primary" />
-              <span className="font-cute text-xs">已收藏</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => handleDelete(selectedImage, e)}
+                className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1.5 text-destructive transition-colors hover:bg-destructive/20"
+              >
+                <Trash2 className="size-4" />
+                <span className="font-cute text-xs">删除</span>
+              </button>
+              <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-primary">
+                <Heart className="size-4 fill-primary" />
+                <span className="font-cute text-xs">已收藏</span>
+              </span>
+            </div>
           </div>
+        </div>
+      ) : images.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <span className="mb-4 flex size-20 items-center justify-center rounded-full bg-secondary/50">
+            <Image className="size-10 text-muted-foreground" />
+          </span>
+          <p className="font-cute text-base text-muted-foreground">空空如也~</p>
+          <p className="mt-2 text-sm text-muted-foreground/70">在记忆信件里放大图片，点击“存入相册”，会在这里显示哦</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <p className="font-cute text-sm text-muted-foreground">收藏的美好瞬间~</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center justify-between">
+            <p className="font-cute text-sm text-muted-foreground">收藏的美好瞬间~</p>
+            <span className="rounded-full bg-secondary/50 px-2.5 py-1 text-xs text-muted-foreground">{images.length} 张</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
             {images.map((img) => (
               <button
                 key={img.id}
                 onClick={() => setSelectedImage(img)}
-                className="group overflow-hidden rounded-2xl border-2 border-border bg-background/60 text-left transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg"
+                className="group relative overflow-hidden rounded-2xl border-2 border-border bg-background/60 text-left transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg"
               >
                 <div className="aspect-square overflow-hidden bg-secondary/20">
                   {imageErrors.has(img.src) ? (
@@ -195,9 +198,9 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie' }: { open: bo
                     />
                   )}
                 </div>
-                <div className="p-2">
-                  <p className="truncate font-cute text-sm text-foreground">{img.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{img.date}</p>
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
+                  <p className="truncate font-cute text-xs text-white">{img.title}</p>
+                  <p className="mt-0.5 text-[10px] text-white/80">{img.date}</p>
                 </div>
               </button>
             ))}

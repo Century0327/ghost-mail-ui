@@ -36,6 +36,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
   const [loadingMore, setLoadingMore] = useState(false)
   const [favAnimating, setFavAnimating] = useState(false)
   const [albumAnimating, setAlbumAnimating] = useState(false)
+  const [savingToAlbum, setSavingToAlbum] = useState(false)
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set())
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -160,10 +161,20 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
     return existing.some(a => a.src === imgSrc)
   }
 
-  const saveImageToAlbum = (imgSrc: string) => {
+  const saveImageToAlbum = async (imgSrc: string) => {
+    if (savingToAlbum || isImageInAlbum(imgSrc)) return
+    setSavingToAlbum(true)
     setAlbumAnimating(true)
-    const existing = companionLocal.getAttachments(characterId)
-    if (!existing.find(a => a.src === imgSrc)) {
+    try {
+      await companionApi.createAttachment({
+        character_id: characterId,
+        src: imgSrc,
+        title: active?.title || '美好瞬间',
+        letter_id: active?.id,
+      })
+    } catch (err) {
+      console.error('存入相册失败:', err)
+      // 后端失败时，至少保存到本地，避免用户完全无法使用
       companionLocal.addAttachment({
         characterId,
         letterId: active?.id,
@@ -171,8 +182,10 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
         title: active?.title || '美好瞬间',
         createdAt: new Date().toISOString(),
       })
+    } finally {
+      setSavingToAlbum(false)
+      setTimeout(() => setAlbumAnimating(false), 600)
     }
-    setTimeout(() => setAlbumAnimating(false), 600)
   }
 
   const handleClose = () => {
@@ -247,38 +260,71 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
             {active.images.length > 0 && (
               <div className="my-4">
                 {zoomed ? (
-                  <div className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-out bg-secondary/20"
-                    onClick={() => setZoomed(false)}
-                  >
-                    {imageErrors.has(active.images[activeImageIndex]) ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                        <Image className="size-12 mb-2 opacity-50" />
-                        <span className="text-sm">图片加载失败</span>
+                  <div className="rounded-xl border border-border/50 bg-secondary/20 p-1">
+                    <div
+                      className="relative overflow-hidden rounded-lg cursor-zoom-out"
+                      onClick={() => setZoomed(false)}
+                    >
+                      {imageErrors.has(active.images[activeImageIndex]) ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                          <Image className="size-16 mb-2 opacity-50" />
+                          <span className="text-sm">图片加载失败</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={active.images[activeImageIndex]}
+                          alt=""
+                          className="w-full object-contain"
+                          style={{ maxHeight: '50vh' }}
+                          onError={() => handleImageError(active.images[activeImageIndex])}
+                        />
+                      )}
+                      <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
+                        <ZoomIn className="size-3" /> 点击缩小
                       </div>
-                    ) : (
-                      <img
-                        src={active.images[activeImageIndex]}
-                        alt=""
-                        className="w-full object-contain transition-transform duration-300"
-                        style={{ maxHeight: '55vh' }}
-                        onError={() => handleImageError(active.images[activeImageIndex])}
-                      />
-                    )}
-                    <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
-                      <ZoomIn className="size-3" /> 点击缩小
+                      {active.images.length > 1 && (
+                        <div className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
+                          {activeImageIndex + 1} / {active.images.length}
+                        </div>
+                      )}
                     </div>
-                    {active.images.length > 1 && (
-                      <div className="absolute bottom-2 left-2 rounded-full bg-black/50 px-2 py-1 text-xs text-white/80 backdrop-blur-sm">
-                        {activeImageIndex + 1} / {active.images.length}
-                      </div>
-                    )}
+
+                    {/* 大图模式下显示存入相册按钮 */}
+                    <div className="mt-3 flex items-center justify-center">
+                      {(() => {
+                        const currentImg = active.images[activeImageIndex]
+                        const inAlbum = isImageInAlbum(currentImg)
+                        return (
+                          <button
+                            onClick={() => saveImageToAlbum(currentImg)}
+                            disabled={inAlbum || savingToAlbum}
+                            className={`flex h-11 items-center gap-2 rounded-full px-5 font-cute text-base transition-all active:scale-95 ${
+                              inAlbum
+                                ? 'bg-primary/15 text-primary cursor-default'
+                                : 'bg-primary text-primary-foreground shadow-md hover:brightness-110'
+                            } ${albumAnimating ? 'scale-105' : ''}`}
+                          >
+                            <span className="relative flex size-5 items-center justify-center">
+                              <Image
+                                className={`size-5 transition-all ${albumAnimating && !inAlbum ? 'scale-125' : ''}`}
+                                fill={inAlbum ? 'currentColor' : 'none'}
+                              />
+                              {albumAnimating && !inAlbum && (
+                                <Image className="size-5 absolute animate-ping opacity-50" />
+                              )}
+                            </span>
+                            <span>{inAlbum ? '已存入相册' : savingToAlbum ? '保存中...' : '存入相册'}</span>
+                          </button>
+                        )
+                      })()}
+                    </div>
                   </div>
                 ) : (
                   <div className={`grid gap-2 ${active.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                     {active.images.map((img, idx) => (
                       <div
                         key={idx}
-                        className="relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-in bg-secondary/20 aspect-video"
+                        className="group relative overflow-hidden rounded-xl border border-border/50 cursor-zoom-in bg-secondary/20 aspect-video"
                         onClick={() => { setActiveImageIndex(idx); setZoomed(true) }}
                       >
                         {imageErrors.has(img) ? (
@@ -289,11 +335,11 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                           <img
                             src={img}
                             alt=""
-                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                             onError={() => handleImageError(img)}
                           />
                         )}
-                        <div className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white/80 backdrop-blur-sm">
+                        <div className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white/80 backdrop-blur-sm opacity-80 group-hover:opacity-100">
                           <ZoomIn className="size-3" /> 放大
                         </div>
                       </div>
@@ -310,53 +356,26 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-dashed border-border pt-4">
               <button
                 onClick={() => toggleFavorite(active.id)}
-                className={`flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all active:scale-95 ${
+                className={`flex h-11 items-center gap-2 rounded-full px-5 font-cute text-base transition-all active:scale-95 ${
                   active.category === 'favorite'
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-primary text-primary-foreground shadow-md'
                     : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
                 } ${favAnimating ? 'scale-105' : ''}`}
               >
-                <span className="relative flex size-4 items-center justify-center">
+                <span className="relative flex size-5 items-center justify-center">
                   {active.category === 'favorite' ? (
-                    <Check className="size-4" />
+                    <Check className="size-5" />
                   ) : (
                     <>
-                      <Heart className={`size-4 transition-all ${favAnimating ? 'scale-125' : ''}`} />
+                      <Heart className={`size-5 transition-all ${favAnimating ? 'scale-125' : ''}`} />
                       {favAnimating && (
-                        <Heart className="size-4 absolute animate-ping opacity-50" />
+                        <Heart className="size-5 absolute animate-ping opacity-50" />
                       )}
                     </>
                   )}
                 </span>
-                <span>{active.category === 'favorite' ? '已珍藏' : '珍藏'}</span>
+                <span>{active.category === 'favorite' ? '已珍藏' : '珍藏这封信'}</span>
               </button>
-
-              {active.images.length > 0 && (() => {
-                const currentImg = active.images[activeImageIndex]
-                const inAlbum = isImageInAlbum(currentImg)
-                return (
-                  <button
-                    onClick={() => saveImageToAlbum(currentImg)}
-                    disabled={inAlbum}
-                    className={`flex min-h-10 items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all active:scale-95 ${
-                      inAlbum
-                        ? 'bg-primary/15 text-primary cursor-default'
-                        : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
-                    } ${albumAnimating ? 'scale-105' : ''}`}
-                  >
-                    <span className="relative flex size-4 items-center justify-center">
-                      <Image
-                        className={`size-4 transition-all ${albumAnimating && !inAlbum ? 'scale-125' : ''}`}
-                        fill={inAlbum ? 'currentColor' : 'none'}
-                      />
-                      {albumAnimating && !inAlbum && (
-                        <Image className="size-4 absolute animate-ping opacity-50" />
-                      )}
-                    </span>
-                    <span>{inAlbum ? '已存入' : '存入相册'}</span>
-                  </button>
-                )
-              })()}
             </div>
           </div>
         </div>

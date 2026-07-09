@@ -408,6 +408,25 @@ export const companionLocal = {
     return state.attachments
   },
 
+  replaceAttachments(characterId: string | undefined, attachments: Attachment[]): void {
+    const state = this.getState()
+    if (characterId) {
+      state.attachments = [
+        ...state.attachments.filter((a) => a.characterId !== characterId),
+        ...attachments,
+      ]
+    } else {
+      state.attachments = attachments
+    }
+    this.saveState(state)
+  },
+
+  deleteAttachment(id: string): void {
+    const state = this.getState()
+    state.attachments = state.attachments.filter((a) => a.id !== id)
+    this.saveState(state)
+  },
+
   // ==================== 对话 ====================
 
   addConversation(conv: Omit<Conversation, 'id'>): Conversation {
