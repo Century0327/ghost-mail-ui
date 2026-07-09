@@ -8,11 +8,20 @@ export interface CompanionState {
   deviceId: string
   characters: Record<string, CharacterLocalState>
   items: string[] // 拥有的物品 ID
+  itemsLayout: ItemLayout[] // 物品布局信息
   coins: number // 罐罐代币
   letters: Letter[]
   conversations: Conversation[]
   attachments: Attachment[]
   lastSync?: number
+}
+
+export interface ItemLayout {
+  id: string // 物品唯一ID（包含序号后缀）
+  itemId: string // 基础物品ID
+  position: { x: number; y: number }
+  rotation: number
+  hidden: boolean
 }
 
 export interface CharacterLocalState {
@@ -160,6 +169,7 @@ export const companionLocal = {
       deviceId,
       characters: {},
       items: ['cat_bed', 'carpet', 'lamp'],
+      itemsLayout: [],
       coins: 100,
       letters: [],
       conversations: [],
@@ -174,6 +184,7 @@ export const companionLocal = {
       ...state,
       characters: state.characters || {},
       items: state.items || defaults.items,
+      itemsLayout: state.itemsLayout || [],
       coins: state.coins ?? defaults.coins,
       letters: state.letters || [],
       conversations: state.conversations || [],
@@ -457,6 +468,18 @@ export const companionLocal = {
       state.items.push(itemId)
       this.saveState(state)
     }
+  },
+
+  // 获取物品布局
+  getItemsLayout(): ItemLayout[] {
+    return this.getState().itemsLayout
+  },
+
+  // 保存物品布局
+  saveItemsLayout(layout: ItemLayout[]): void {
+    const state = this.getState()
+    state.itemsLayout = layout
+    this.saveState(state)
   },
 
   // ==================== 代币（罐罐）====================

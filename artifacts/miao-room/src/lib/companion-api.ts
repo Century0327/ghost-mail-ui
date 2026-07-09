@@ -4,7 +4,14 @@
 import companionLocal from './companion-local'
 import type { Letter, Conversation, Attachment } from './companion-local'
 
-const API_BASE = 'https://random-ai-mail-ghost.vercel.app' // 后端部署地址
+const API_BASE = '' // 使用相对路径，走 Vercel rewrite 代理，避免 CORS 问题
+
+function resolveAssetUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  if (url.startsWith('/')) return `https://random-ai-mail-ghost.vercel.app${url}`
+  return `https://random-ai-mail-ghost.vercel.app/${url}`
+}
 
 function getDeviceId(): string {
   if (typeof window === 'undefined') return 'server'
@@ -113,7 +120,7 @@ export const companionApi = {
               subject: letter.subject,
               body: letter.body,
               source: letter.source || 'ai',
-              attachmentUrl: letter.attachment_url,
+              attachmentUrl: resolveAssetUrl(letter.attachment_url || letter.attachmentUrl),
               createdAt: letter.created_at,
             })
           }
@@ -196,7 +203,7 @@ export const companionApi = {
         id: att.id,
         letterId: att.letter_id,
         characterId: att.character_id || characterId || 'maodie',
-        src: att.src,
+        src: resolveAssetUrl(att.src || att.url || att.image_url) || '',
         title: att.title,
         createdAt: att.created_at,
       }))
@@ -249,12 +256,22 @@ export const companionApi = {
     return apiFetch(`/api/companion/items/${itemId}/preview`)
   },
 
-  buyItems: async (items: { item_id: string; quantity: number; price: number }[]): Promise<{ status: string; coins?: number; total_spent?: number; items_added?: any[] }> => {
-    const result = await apiFetch('/api/companion/user/items/batch-buy', {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    })
-    return result
+  buyItems: async (items: { item_id: string; quantity: number; price: number }[]): Promise<{ status: string; coins?: number; total_spent?: number; items_added?: any[]; message?: string }> => {
+    try {
+      const result = await apiFetch('/api/companion/user/items/batch-buy', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      })
+      return result
+    } catch (err: any) {
+      console.error('[buyItems] 批量购买失败:', err)
+      return {
+        status: 'error',
+        message: err?.message || '购买失败，请稍后重试',
+        total_spent: 0,
+        items_added: [],
+      }
+    }
   },
 
   // ========== AI 日程生成 ==========

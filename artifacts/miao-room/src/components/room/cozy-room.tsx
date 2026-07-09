@@ -1,7 +1,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Heart } from 'lucide-react'
-import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, type Character } from '@/lib/companion-data'
+import { CAT_SAYINGS, CAT_THOUGHTS, OFFICIAL_CHARACTERS, SHOP_ITEMS, type Character } from '@/lib/companion-data'
 import { companionApi } from '@/lib/companion-api'
 import { companionLocal } from '@/lib/companion-local'
 import { SpeechBubble } from './speech-bubble'
@@ -121,6 +121,32 @@ export function CozyRoom() {
   const [coins, setCoins] = useState(100)
   const [previewItems, setPreviewItems] = useState<InventoryItem[]>([])
   const coinsSyncedRef = useRef(false)
+  const itemsLoadedRef = useRef(false)
+
+  // 初始加载物品布局
+  useEffect(() => {
+    if (itemsLoadedRef.current) return
+    const savedLayout = companionLocal.getItemsLayout()
+    if (savedLayout.length > 0) {
+      const items: InventoryItem[] = savedLayout.map(layout => {
+        const shopItem = SHOP_ITEMS.find(s => s.id === layout.itemId)
+        return {
+          id: layout.id,
+          name: shopItem?.name || layout.itemId,
+          desc: shopItem?.desc || '',
+          price: shopItem?.price || 0,
+          emojiColor: shopItem?.emojiColor || '#ccc',
+          image: shopItem?.image,
+          category: shopItem?.category,
+          position: layout.position,
+          rotation: layout.rotation,
+          hidden: layout.hidden,
+        }
+      }).filter(item => !item.hidden)
+      setPreviewItems(items)
+    }
+    itemsLoadedRef.current = true
+  }, [])
 
   // 代币唯一真实来源：后端数据库。本地不再作为 coins 来源。
   const refreshCoins = async () => {
@@ -672,6 +698,7 @@ export function CozyRoom() {
         onClose={() => { setPanel(null); refreshCoins() }}
         onPreviewChange={setPreviewItems}
         coins={coins}
+        onCoinsChange={(newCoins) => setCoins(newCoins)}
       />
       <SchedulePanel open={panel === 'schedule'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />
       <AlbumPanel open={panel === 'album'} onClose={() => setPanel(null)} characterId={currentCharacter.id} />

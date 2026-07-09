@@ -13,11 +13,18 @@
 - `feat` — Shop panel with item purchase
 - `feat` — Character click interaction (drag, bubble dialog)
 - `fix` — Tab switching overlap in memories panel
+- `refactor` — 商店系统重构：移除购物车，改为点击预览/预购买模式
+- `feat` — 物品布局持久化到 localStorage
+- `feat` — 关闭商店时未保存更改提示
+- `fix` — 信件图片相对路径未转换为后端完整URL导致加载失败
+- `fix` — 批量购买接口走 Vercel rewrite 代理，解决 CORS 导致的支付失败
 
 ### API Integration
 - `feat` — companion-api.ts wrapper for all backend endpoints
 - `feat` — Character data definitions (companion-data.ts)
 - `fix` — API_BASE path resolution for Vercel rewrite
+- `fix` — buyItems 添加错误处理，避免异常直接抛出
+- `feat` — 资源URL自动补全函数 resolveAssetUrl
 
 ### Game (Shopify Store)
 - `feat` — Isometric store street with 6 shops

@@ -4,6 +4,7 @@
   "outputDirectory": "dist/public",
   "rewrites": [
     { "source": "/api/companion/:path*", "destination": "https://random-ai-mail-ghost.vercel.app/api/companion/:path*" },
+    { "source": "/api/auth/:path*", "destination": "https://random-ai-mail-ghost.vercel.app/api/auth/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

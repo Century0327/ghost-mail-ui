@@ -1,22 +1,15 @@
-import { useState, useCallback, useEffect } from 'react'
-import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Save, Trash2, Plus, Minus, ShoppingCart } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { ShoppingBag, Package, Check, X, RotateCw, Eye, EyeOff, Save, Trash2 } from 'lucide-react'
 import { SHOP_ITEMS, type ShopItem } from '@/lib/companion-data'
 import { companionLocal } from '@/lib/companion-local'
 import { companionApi } from '@/lib/companion-api'
 
-type Tab = 'warehouse' | 'shop' | 'cart'
+type Tab = 'warehouse' | 'shop'
 
 export type InventoryItem = ShopItem & {
   position?: { x: number; y: number }
   rotation?: number
   hidden?: boolean
-  preview?: boolean
-  selected?: boolean
-}
-
-type CartItem = ShopItem & {
-  cartId: string
-  quantity: number
 }
 
 function ItemIcon({
@@ -54,49 +47,114 @@ interface ShopPanelProps {
   onClose: () => void
   onPreviewChange?: (items: InventoryItem[]) => void
   coins?: number
+  onCoinsChange?: (newCoins: number) => void
 }
 
-export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopPanelProps) {
+export function ShopPanel({ open, onClose, onPreviewChange, coins = 100, onCoinsChange }: ShopPanelProps) {
   const [currentTab, setCurrentTab] = useState<Tab>('warehouse')
   const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [pendingShopItemIds, setPendingShopItemIds] = useState<Set<string>>(new Set())
   const [showReceipt, setShowReceipt] = useState(false)
-  const [cart, setCart] = useState<CartItem[]>([])
-  const [previewItem, setPreviewItem] = useState<ShopItem | null>(null)
-  const [showPaymentReceipt, setShowPaymentReceipt] = useState(false)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [isBuying, setIsBuying] = useState(false)
 
+  const inventorySnapshotRef = useRef<InventoryItem[]>([])
+  const pendingSnapshotRef = useRef<Set<string>>(new Set())
+  const closeTargetRef = useRef<'save' | 'discard' | null>(null)
+
+  // 打开时加载数据并保存快照
   useEffect(() => {
     if (!open) return
-    const saved = companionLocal.getItems()
-    const inv: InventoryItem[] = saved.map((id, idx) => {
-      const shopItem = SHOP_ITEMS.find(s => s.id === id)
-      return {
-        id: `${id}_${idx}`,
-        name: shopItem?.name || id,
-        desc: shopItem?.desc || '',
-        price: shopItem?.price || 0,
-        emojiColor: shopItem?.emojiColor || '#ccc',
-        image: shopItem?.image,
-        position: { x: 30 + (idx % 5) * 10, y: 55 + Math.floor(idx / 5) * 8 },
-        rotation: 0,
-        hidden: false,
-        preview: false,
-      }
-    })
+    const savedItems = companionLocal.getItems()
+    const savedLayout = companionLocal.getItemsLayout()
+    
+    // 如果有保存的布局，用保存的布局；否则生成默认布局
+    let inv: InventoryItem[]
+    if (savedLayout.length > 0) {
+      inv = savedLayout.map(layout => {
+        const shopItem = SHOP_ITEMS.find(s => s.id === layout.itemId)
+        return {
+          id: layout.id,
+          name: shopItem?.name || layout.itemId,
+          desc: shopItem?.desc || '',
+          price: shopItem?.price || 0,
+          emojiColor: shopItem?.emojiColor || '#ccc',
+          image: shopItem?.image,
+          category: shopItem?.category,
+          position: layout.position,
+          rotation: layout.rotation,
+          hidden: layout.hidden,
+        }
+      })
+    } else {
+      inv = savedItems.map((id, idx) => {
+        const shopItem = SHOP_ITEMS.find(s => s.id === id)
+        return {
+          id: `${id}_${idx}`,
+          name: shopItem?.name || id,
+          desc: shopItem?.desc || '',
+          price: shopItem?.price || 0,
+          emojiColor: shopItem?.emojiColor || '#ccc',
+          image: shopItem?.image,
+          category: shopItem?.category,
+          position: { x: 30 + (idx % 5) * 10, y: 55 + Math.floor(idx / 5) * 8 },
+          rotation: 0,
+          hidden: false,
+        }
+      })
+    }
+    
     setInventory(inv)
-    setSelectedIds(new Set())
-    setCart([])
+    setPendingShopItemIds(new Set())
+    inventorySnapshotRef.current = JSON.parse(JSON.stringify(inv))
+    pendingSnapshotRef.current = new Set()
+    closeTargetRef.current = null
   }, [open])
 
+  // 计算预览物品：仓库中未隐藏的 + 商店中待购买的
+  const previewItems: InventoryItem[] = [
+    ...inventory.filter(item => !item.hidden),
+    ...Array.from(pendingShopItemIds).map((id, idx) => {
+      const shopItem = SHOP_ITEMS.find(s => s.id === id)!
+      return {
+        ...shopItem,
+        id: `pending_${id}_${idx}`,
+        position: { x: 50 + (idx % 3) * 8 - 8, y: 58 + Math.floor(idx / 3) * 8 },
+        rotation: 0,
+        hidden: false,
+      }
+    }),
+  ]
+
+  // 同步预览到父组件
   useEffect(() => {
     if (!onPreviewChange) return
-    const previewItems = inventory.filter(item => selectedIds.has(item.id))
     onPreviewChange(previewItems)
-  }, [selectedIds, inventory, onPreviewChange])
+  }, [previewItems, onPreviewChange])
 
-  const toggleSelect = useCallback((item: InventoryItem) => {
-    setSelectedIds(prev => {
+  // 计算待花费代币
+  const pendingTotal = Array.from(pendingShopItemIds).reduce((sum, id) => {
+    const item = SHOP_ITEMS.find(s => s.id === id)
+    return sum + (item?.price || 0)
+  }, 0)
+
+  // 检查是否有未保存的更改
+  const hasUnsavedChanges = useCallback(() => {
+    const invChanged = JSON.stringify(inventory) !== JSON.stringify(inventorySnapshotRef.current)
+    const pendingChanged = Array.from(pendingShopItemIds).sort().join(',') !== Array.from(pendingSnapshotRef.current).sort().join(',')
+    return invChanged || pendingChanged
+  }, [inventory, pendingShopItemIds])
+
+  // 仓库物品点击：切换显示/隐藏
+  const toggleWarehouseItem = useCallback((item: InventoryItem) => {
+    setInventory(prev =>
+      prev.map(i => i.id === item.id ? { ...i, hidden: !i.hidden } : i)
+    )
+  }, [])
+
+  // 商店物品点击：切换待购买状态
+  const toggleShopItem = useCallback((item: ShopItem) => {
+    setPendingShopItemIds(prev => {
       const next = new Set(prev)
       if (next.has(item.id)) {
         next.delete(item.id)
@@ -107,159 +165,164 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
     })
   }, [])
 
+  // 旋转物品
   const handleRotate = useCallback((itemId: string) => {
     setInventory(prev =>
-      prev.map((i) => (i.id === itemId ? { ...i, rotation: ((i.rotation || 0) + 90) % 360 } : i))
+      prev.map(i => i.id === itemId ? { ...i, rotation: ((i.rotation || 0) + 90) % 360 } : i)
     )
   }, [])
 
-  const handleToggleVisibility = useCallback((itemId: string) => {
-    setInventory(prev =>
-      prev.map((i) => (i.id === itemId ? { ...i, hidden: !i.hidden } : i))
-    )
+  // 移除仓库物品
+  const handleRemove = useCallback((itemId: string) => {
+    setInventory(prev => prev.filter(i => i.id !== itemId))
   }, [])
 
-  const addToCart = useCallback((item: ShopItem) => {
-    setCart(prev => {
-      const existing = prev.find(c => c.id === item.id)
-      if (existing) {
-        return prev.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c)
-      }
-      return [...prev, { ...item, cartId: `${item.id}_${Date.now()}`, quantity: 1 }]
-    })
-  }, [])
+  // 保存当前状态（仅显示/隐藏，不涉及代币）
+  const saveLayoutOnly = useCallback(() => {
+    const newInv = [...inventory]
+    // 保存布局到 localStorage
+    const layout = newInv.map(item => ({
+      id: item.id,
+      itemId: item.id.split('_')[0],
+      position: item.position || { x: 50, y: 50 },
+      rotation: item.rotation || 0,
+      hidden: item.hidden || false,
+    }))
+    companionLocal.saveItemsLayout(layout)
+    // 同时更新物品列表（确保新购买的物品也被保存）
+    const itemIds = Array.from(new Set(newInv.map(i => i.id.split('_')[0])))
+    itemIds.forEach(id => companionLocal.addItem(id))
+    
+    inventorySnapshotRef.current = JSON.parse(JSON.stringify(newInv))
+    pendingSnapshotRef.current = new Set(pendingShopItemIds)
+  }, [inventory, pendingShopItemIds])
 
-  const removeFromCart = useCallback((cartId: string) => {
-    setCart(prev => prev.filter(c => c.cartId !== cartId))
-  }, [])
+  // 执行购买
+  const doPurchase = useCallback(async () => {
+    if (pendingTotal === 0) {
+      saveLayoutOnly()
+      return true
+    }
 
-  const decreaseQuantity = useCallback((cartId: string) => {
-    setCart(prev => {
-      const item = prev.find(c => c.cartId === cartId)
-      if (!item) return prev
-      if (item.quantity <= 1) {
-        return prev.filter(c => c.cartId !== cartId)
-      }
-      return prev.map(c => c.cartId === cartId ? { ...c, quantity: c.quantity - 1 } : c)
-    })
-  }, [])
-
-  const increaseQuantity = useCallback((cartId: string) => {
-    setCart(prev => prev.map(c => c.cartId === cartId ? { ...c, quantity: c.quantity + 1 } : c))
-  }, [])
-
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const canAffordCart = coins >= cartTotal
-
-  // 打开物品预览
-  const openPreview = useCallback((item: ShopItem) => {
-    setPreviewItem(item)
-  }, [])
-
-  // 从预览弹窗加入购物车
-  const addToCartFromPreview = useCallback(() => {
-    if (!previewItem) return
-    setCart(prev => {
-      const existing = prev.find(c => c.id === previewItem.id)
-      if (existing) {
-        return prev.map(c => c.id === previewItem.id ? { ...c, quantity: c.quantity + 1 } : c)
-      }
-      return [...prev, { ...previewItem, cartId: `${previewItem.id}_${Date.now()}`, quantity: 1 }]
-    })
-    setPreviewItem(null)
-  }, [previewItem])
-
-  // 点击确认支付 → 打开支付小票
-  const handleCheckout = useCallback(() => {
-    if (!canAffordCart || cart.length === 0) return
-    setShowPaymentReceipt(true)
-  }, [canAffordCart, cart])
-
-  // 小票确认后真正扣款购买
-  const confirmCheckout = useCallback(async () => {
-    if (!canAffordCart || cart.length === 0) return
     setIsBuying(true)
     try {
-      const items = cart.map(item => ({
-        item_id: item.id,
-        quantity: item.quantity,
-        price: item.price,
+      const items = Array.from(pendingShopItemIds).map(id => ({
+        item_id: id,
+        quantity: 1,
+        price: SHOP_ITEMS.find(s => s.id === id)?.price || 0,
       }))
       const result = await companionApi.buyItems(items)
       if (result.status === 'ok') {
-        // 更新本地金币（后端返回新余额，或前端计算）
-        const newCoins = result.coins ?? (coins - cartTotal)
-        companionLocal.setCoins(newCoins)
-
-        const newInventoryItems: InventoryItem[] = []
-        cart.forEach(item => {
-          for (let i = 0; i < item.quantity; i++) {
-            const newItem: InventoryItem = {
-              ...item,
-              id: `${item.id}_${Date.now()}_${i}`,
-              position: { x: 50 + (Math.random() - 0.5) * 20, y: 60 + (Math.random() - 0.5) * 10 },
-              rotation: 0,
-              hidden: false,
-              preview: false,
-            }
-            newInventoryItems.push(newItem)
-            companionLocal.addItem(item.id)
+        // 计算新的仓库物品：原来的 + 新购买的
+        const newItems: InventoryItem[] = Array.from(pendingShopItemIds).map((id, idx) => {
+          const shopItem = SHOP_ITEMS.find(s => s.id === id)!
+          return {
+            ...shopItem,
+            id: `${id}_${Date.now()}_${idx}`,
+            position: { x: 50 + (idx % 3) * 8 - 8, y: 58 + Math.floor(idx / 3) * 8 },
+            rotation: 0,
+            hidden: false,
           }
         })
+        const newInv = [...inventory, ...newItems]
+        setInventory(newInv)
 
-        setInventory(prev => [...prev, ...newInventoryItems])
-        setCart([])
-        setShowPaymentReceipt(false)
-        setCurrentTab('warehouse')
+        // 更新本地存储
+        newInv.forEach(item => {
+          const baseId = item.id.split('_')[0]
+          companionLocal.addItem(baseId)
+        })
+
+        // 更新代币
+        const newCoins = result.coins ?? (coins - pendingTotal)
+        companionLocal.setCoins(newCoins)
+        onCoinsChange?.(newCoins)
+
+        // 清空待购买
+        setPendingShopItemIds(new Set())
+
+        // 更新快照
+        inventorySnapshotRef.current = JSON.parse(JSON.stringify(newInv))
+        pendingSnapshotRef.current = new Set()
+
+        return true
       } else {
         alert(result.message || '购买失败')
+        return false
       }
     } catch (err) {
       console.error('购买失败:', err)
       alert('购买失败，请稍后重试')
+      return false
     } finally {
       setIsBuying(false)
     }
-  }, [cart, coins, cartTotal, canAffordCart])
+  }, [pendingShopItemIds, inventory, coins, pendingTotal, onCoinsChange, saveLayoutOnly])
 
-  // 物品分类中文标签
-  const getCategoryLabel = (category?: string) => {
-    const map: Record<string, string> = {
-      food: '食物',
-      toy: '玩具',
-      furniture: '家具',
-      decoration: '装饰',
-      item: '道具',
+  // 点击保存按钮
+  const handleSave = useCallback(() => {
+    if (pendingTotal > 0) {
+      setShowReceipt(true)
+    } else {
+      saveLayoutOnly()
     }
-    return map[category || 'item'] || '道具'
-  }
+  }, [pendingTotal, saveLayoutOnly])
 
-  const handleRemove = useCallback((itemId: string) => {
-    setInventory(prev => prev.filter(i => i.id !== itemId))
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.delete(itemId)
-      return next
-    })
-  }, [])
+  // 小票确认支付
+  const confirmReceipt = useCallback(async () => {
+    const ok = await doPurchase()
+    if (ok) {
+      setShowReceipt(false)
+    }
+  }, [doPurchase])
 
-  const selectedItems = inventory.filter(i => selectedIds.has(i.id))
+  // 尝试关闭（检查未保存）
+  const tryClose = useCallback(() => {
+    if (hasUnsavedChanges()) {
+      setShowUnsavedDialog(true)
+    } else {
+      onClose()
+    }
+  }, [hasUnsavedChanges, onClose])
 
-  const handleSave = () => {
-    setShowReceipt(true)
-  }
+  // 未保存对话框：保存并退出
+  const handleSaveAndClose = useCallback(async () => {
+    closeTargetRef.current = 'save'
+    if (pendingTotal > 0) {
+      setShowUnsavedDialog(false)
+      setShowReceipt(true)
+    } else {
+      saveLayoutOnly()
+      setShowUnsavedDialog(false)
+      onClose()
+    }
+  }, [pendingTotal, saveLayoutOnly, onClose])
 
-  const confirmSave = () => {
-    setShowReceipt(false)
+  // 未保存对话框：直接退出
+  const handleDiscardAndClose = useCallback(() => {
+    // 恢复快照
+    setInventory(JSON.parse(JSON.stringify(inventorySnapshotRef.current)))
+    setPendingShopItemIds(new Set(pendingSnapshotRef.current))
+    setShowUnsavedDialog(false)
     onClose()
-  }
+  }, [onClose])
+
+  // 小票取消后，如果是从关闭触发的，继续关闭流程
+  useEffect(() => {
+    if (!showReceipt && closeTargetRef.current === 'save') {
+      closeTargetRef.current = null
+      // 检查是否购买成功（通过比较快照）
+      if (!hasUnsavedChanges()) {
+        onClose()
+      }
+    }
+  }, [showReceipt, hasUnsavedChanges, onClose])
 
   if (!open) return null
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-0 z-40" onClick={onClose} />
+      <div className="pointer-events-none fixed inset-0 z-40" onClick={tryClose} />
       
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-3 sm:bottom-6">
         <div className="mx-3 w-full max-w-2xl">
@@ -290,27 +353,18 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
                 <ShoppingBag className="size-5" />
                 商店
               </button>
-              <button
-                onClick={() => setCurrentTab('cart')}
-                className={`flex flex-1 items-center justify-center gap-2 px-4 py-3.5 font-pixel text-sm transition-colors ${
-                  currentTab === 'cart'
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <ShoppingCart className="size-5" />
-                购物车
-                {cartCount > 0 && (
-                  <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs text-white">{cartCount}</span>
-                )}
-              </button>
               <div className="flex items-center gap-2 px-3">
-                <span className="flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 font-pixel text-sm text-amber-800">
+                <span className={`flex items-center gap-1 rounded-full px-3 py-1 font-pixel text-sm ${
+                  pendingTotal > 0 ? 'bg-amber-100 text-amber-800' : 'bg-amber-50 text-amber-600'
+                }">
                   <span className="text-base">🥫</span>
                   {coins}
+                  {pendingTotal > 0 && (
+                    <span className="text-amber-500"> (-{pendingTotal})</span>
+                  )}
                 </span>
                 <button
-                  onClick={onClose}
+                  onClick={tryClose}
                   className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary/70 transition hover:bg-secondary"
                   aria-label="关闭"
                 >
@@ -332,72 +386,74 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
                 ) : (
                   <div className="grid grid-cols-4 gap-3 pb-2 sm:grid-cols-6">
                     {inventory.map((item) => {
-                      const isSelected = selectedIds.has(item.id)
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => toggleSelect(item)}
-                          className={`relative flex cursor-pointer flex-col items-center rounded-2xl border-2 p-2.5 transition-all ${
-                            isSelected
-                              ? 'border-primary bg-primary/10 shadow-md scale-[1.02]'
-                              : item.hidden
-                                ? 'border-dashed border-border/50 bg-secondary/30 opacity-60'
-                                : 'border-border bg-background/60 hover:border-primary/40 hover:shadow-sm'
-                          }`}
-                        >
-                          {isSelected && (
-                            <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                              <Check className="size-3" />
-                            </span>
-                          )}
-                          <div style={{ transform: `rotate(${item.rotation || 0}deg)`, transition: 'transform 0.3s' }}>
-                            <ItemIcon item={item} size="sm" />
-                          </div>
-                          <p className="mt-1.5 w-full truncate text-center font-pixel text-[10px] text-foreground">{item.name}</p>
-                          
-                          <div className="mt-1.5 flex w-full gap-0.5">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleRotate(item.id); }}
-                              title="旋转"
-                              className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
-                            >
-                              <RotateCw className="size-3 text-muted-foreground" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleToggleVisibility(item.id); }}
-                              title={item.hidden ? '显示' : '隐藏'}
-                              className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
-                            >
-                              {item.hidden ? <Eye className="size-3 text-muted-foreground" /> : <EyeOff className="size-3 text-muted-foreground" />}
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
-                              title="移除"
-                              className="flex flex-1 items-center justify-center rounded-md bg-red-100 py-1 transition hover:bg-red-200"
-                            >
-                              <Trash2 className="size-3 text-red-500" />
-                            </button>
-                          </div>
+                    const isShowing = !item.hidden
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => toggleWarehouseItem(item)}
+                        className={`relative flex cursor-pointer flex-col items-center rounded-2xl border-2 p-2.5 transition-all ${
+                          isShowing
+                            ? 'border-primary bg-primary/10 shadow-md scale-[1.02]'
+                            : 'border-dashed border-border/50 bg-secondary/30 opacity-60 hover:opacity-80'
+                        }`}
+                      >
+                        {isShowing && (
+                          <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                            <Eye className="size-3" />
+                          </span>
+                        )}
+                        <div style={{ transform: `rotate(${item.rotation || 0}deg)`, transition: 'transform 0.3s' }}>
+                          <ItemIcon item={item} size="sm" />
                         </div>
-                      )
-                    })}
+                        <p className="mt-1.5 w-full truncate text-center font-pixel text-[10px] text-foreground">{item.name}</p>
+                        
+                        <div className="mt-1.5 flex w-full gap-0.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRotate(item.id); }}
+                            title="旋转"
+                            className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
+                          >
+                            <RotateCw className="size-3 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleWarehouseItem(item); }}
+                            title={item.hidden ? '显示' : '隐藏'}
+                            className="flex flex-1 items-center justify-center rounded-md bg-secondary/50 py-1 transition hover:bg-secondary"
+                          >
+                            {item.hidden ? <Eye className="size-3 text-muted-foreground" /> : <EyeOff className="size-3 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
+                            title="移除"
+                            className="flex flex-1 items-center justify-center rounded-md bg-red-100 py-1 transition hover:bg-red-200"
+                          >
+                            <Trash2 className="size-3 text-red-500" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
                   </div>
                 )
-              ) : currentTab === 'shop' ? (
+              ) : (
                 <div className="grid grid-cols-4 gap-3 pb-2 sm:grid-cols-6">
                   {SHOP_ITEMS.map((item) => {
-                    const owned = inventory.some((i) => i.id.startsWith(item.id))
+                    const isPending = pendingShopItemIds.has(item.id)
                     const canAfford = coins >= item.price
                     return (
                       <div
                         key={item.id}
-                        onClick={() => !owned && openPreview(item)}
-                        className={`relative flex flex-col items-center rounded-2xl border-2 bg-background/60 p-2.5 transition-all ${
-                          owned ? 'opacity-60 cursor-default' : 'border-border hover:border-primary/40 hover:shadow-sm cursor-pointer'
+                        onClick={() => toggleShopItem(item)}
+                        className={`relative flex flex-col items-center rounded-2xl border-2 bg-background/60 p-2.5 transition-all cursor-pointer ${
+                          isPending
+                            ? 'border-amber-500 bg-amber-50 shadow-md scale-[1.02]'
+                            : canAfford
+                              ? 'border-border hover:border-primary/40 hover:shadow-sm'
+                              : 'border-border/50 opacity-60'
                         }`}
                       >
-                        {owned && (
-                          <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-green-500 text-white shadow-sm">
+                        {isPending && (
+                          <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm">
                             <Check className="size-3" />
                           </span>
                         )}
@@ -405,140 +461,99 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
                         <p className="mt-1.5 w-full truncate text-center font-pixel text-[10px] text-foreground">{item.name}</p>
                         <p className="mt-0.5 line-clamp-2 w-full text-center text-[9px] text-muted-foreground">{item.desc}</p>
                         
-                        {owned ? (
-                          <span className="mt-1.5 font-pixel text-[10px] text-green-600">已拥有</span>
-                        ) : (
-                          <div className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-full px-2 py-1 font-pixel text-[10px] ${
-                            canAfford
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-gray-100 text-gray-400'
-                          }`}>
-                            <span>🥫</span>
-                            {item.price}
-                          </div>
-                        )}
+                        <div className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-full px-2 py-1 font-pixel text-[10px] ${
+                          canAfford
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}>
+                          <span>🥫</span>
+                          {item.price}
+                        </div>
                       </div>
                     )
                   })}
                 </div>
-              ) : (
-                cart.length === 0 ? (
-                  <div className="flex min-h-32 flex-col items-center justify-center py-8 text-center">
-                    <span className="mb-3 flex size-14 items-center justify-center rounded-full bg-secondary/50">
-                      <ShoppingCart className="size-7 text-muted-foreground" />
-                    </span>
-                    <p className="font-pixel text-muted-foreground">购物车是空的</p>
-                    <p className="mt-1 text-xs text-muted-foreground/70">去商店添加点东西吧</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 pb-2">
-                    {cart.map((item) => (
-                      <div
-                        key={item.cartId}
-                        className="flex items-center gap-3 rounded-2xl border-2 border-border bg-background/60 p-3"
-                      >
-                        <ItemIcon item={item} size="sm" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-pixel text-sm text-foreground truncate">{item.name}</p>
-                          <p className="font-pixel text-xs text-amber-600">🥫 {item.price} / 个</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => decreaseQuantity(item.cartId)}
-                            className="flex size-7 items-center justify-center rounded-full bg-secondary/50 transition hover:bg-secondary"
-                          >
-                            <Minus className="size-3 text-muted-foreground" />
-                          </button>
-                          <span className="font-pixel text-sm w-6 text-center">{item.quantity}</span>
-                          <button
-                            onClick={() => increaseQuantity(item.cartId)}
-                            className="flex size-7 items-center justify-center rounded-full bg-secondary/50 transition hover:bg-secondary"
-                          >
-                            <Plus className="size-3 text-muted-foreground" />
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => removeFromCart(item.cartId)}
-                          className="flex size-8 items-center justify-center rounded-full bg-red-100 transition hover:bg-red-200"
-                          title="移除"
-                        >
-                          <Trash2 className="size-4 text-red-500" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )
               )}
             </div>
 
             <div className="flex items-center gap-3 border-t-2 border-border/70 bg-secondary/40 px-4 py-3 shrink-0">
               <div className="flex-1">
-                {currentTab === 'cart' ? (
+                {pendingTotal > 0 ? (
                   <>
                     <p className="font-pixel text-xs text-muted-foreground">
-                      购物车 {cartCount} 件商品
+                      待购买 {pendingShopItemIds.size} 件商品
                     </p>
-                    {cartTotal > 0 && (
-                      <p className="font-pixel text-sm text-amber-600">
-                        合计：🥫 {cartTotal}
-                      </p>
-                    )}
+                    <p className="font-pixel text-sm text-amber-600">
+                      合计：🥫 {pendingTotal}
+                    </p>
                   </>
                 ) : (
                   <>
                     <p className="font-pixel text-xs text-muted-foreground">
-                      已选 {selectedItems.length} 件物品
+                    调整显示中的物品 {inventory.filter(i => !i.hidden).length} 件
                     </p>
                   </>
                 )}
               </div>
-              {currentTab === 'cart' ? (
-                <button
-                  onClick={handleCheckout}
-                  disabled={!canAffordCart || cart.length === 0}
-                  className={`flex items-center gap-1.5 rounded-full px-5 py-2 font-pixel text-sm transition active:scale-95 ${
-                    canAffordCart && cart.length > 0
-                      ? 'bg-amber-500 text-white hover:brightness-105'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  <ShoppingCart className="size-4" />
-                  确认支付
-                </button>
-              ) : (
-                <button
-                  onClick={handleSave}
-                  className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 font-pixel text-sm text-primary-foreground transition hover:brightness-105 active:scale-95"
-                >
-                  <Save className="size-4" />
-                  保存
-                </button>
-              )}
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 font-pixel text-sm text-primary-foreground transition hover:brightness-105 active:scale-95"
+              >
+                <Save className="size-4" />
+                保存
+              </button>
             </div>
           </div>
         </div>
       </div>
 
+      {/* 小票弹窗 */}
       {showReceipt && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-card p-6 shadow-2xl animate-bubble-in">
-            <h3 className="mb-4 text-center font-pixel text-lg text-foreground">确认保存</h3>
+            <h3 className="mb-4 text-center font-pixel text-lg text-foreground">
+              {pendingTotal > 0 ? '支付小票' : '确认保存'}
+            </h3>
             
             <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-4">
               <div className="mb-3 border-b border-dashed border-border pb-2">
-                <p className="font-pixel text-xs text-muted-foreground">布置清单</p>
+                <p className="font-pixel text-xs text-muted-foreground">
+                  {pendingTotal > 0 ? '商品清单' : '布置清单'}
+                </p>
               </div>
               
-              {selectedItems.length === 0 ? (
-                <p className="py-4 text-center font-pixel text-xs text-muted-foreground">没有选择物品</p>
-              ) : (
+              {pendingTotal > 0 ? (
                 <div className="space-y-2">
-                  {selectedItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between">
+                  {Array.from(pendingShopItemIds).map(id => {
+                  const item = SHOP_ITEMS.find(s => s.id === id)!
+                  return (
+                    <div key={id} className="flex items-center justify-between">
                       <span className="font-pixel text-xs text-foreground">{item.name}</span>
-                      <span className="font-pixel text-xs text-muted-foreground">已摆放</span>
+                      <span className="font-pixel text-xs text-muted-foreground">🥫 {item.price}</span>
                     </div>
-                  ))}
+                  )
+                })}
+                </div>
+              ) : (
+                <p className="py-4 text-center font-pixel text-xs text-muted-foreground">
+                  共 {inventory.filter(i => !i.hidden).length} 件物品已摆放
+                </p>
+              )}
+              
+              {pendingTotal > 0 && (
+                <div className="mt-3 border-t border-dashed border-border pt-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-pixel text-xs text-muted-foreground">合计</span>
+                    <span className="font-pixel text-sm text-amber-600">🥫 {pendingTotal}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-pixel text-xs text-muted-foreground">当前余额</span>
+                    <span className="font-pixel text-xs text-foreground">🥫 {coins}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-pixel text-xs text-muted-foreground">购买后余额</span>
+                    <span className={`font-pixel text-xs ${coins - pendingTotal < 0 ? 'text-red-500' : 'text-foreground'}`}>🥫 {coins - pendingTotal}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -546,109 +561,44 @@ export function ShopPanel({ open, onClose, onPreviewChange, coins = 100 }: ShopP
             <div className="mt-5 flex gap-3">
               <button
                 onClick={() => setShowReceipt(false)}
-                className="flex-1 rounded-full bg-secondary py-2.5 font-pixel text-sm text-secondary-foreground transition hover:bg-secondary/80"
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmSave}
-                className="flex-1 rounded-full bg-primary py-2.5 font-pixel text-sm text-primary-foreground transition hover:brightness-105"
-              >
-                确认保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 物品预览弹窗 */}
-      {previewItem && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-card p-6 shadow-2xl animate-bubble-in">
-            <div className="flex flex-col items-center">
-              <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-2xl" style={{ backgroundColor: previewItem.emojiColor + '33' }}>
-                {previewItem.image ? (
-                  <img src={previewItem.image} alt={previewItem.name} className="pixelated h-16 w-16 object-contain" />
-                ) : (
-                  <span className="h-16 w-16 rounded-xl border-2 border-border/60" style={{ backgroundColor: previewItem.emojiColor }} />
-                )}
-              </div>
-              <h3 className="mb-1 text-center font-pixel text-lg text-foreground">{previewItem.name}</h3>
-              <p className="mb-1 text-center text-xs text-muted-foreground">{getCategoryLabel(previewItem.category)}</p>
-              <p className="mb-4 text-center text-sm text-muted-foreground">{previewItem.desc}</p>
-              <div className="mb-5 flex items-center gap-1 font-pixel text-amber-600">
-                <span>🥫</span>
-                <span>{previewItem.price}</span>
-              </div>
-              <div className="flex w-full gap-3">
-                <button
-                  onClick={() => setPreviewItem(null)}
-                  className="flex-1 rounded-full bg-secondary py-2.5 font-pixel text-sm text-secondary-foreground transition hover:bg-secondary/80"
-                >
-                  关闭
-                </button>
-                <button
-                  onClick={addToCartFromPreview}
-                  className="flex-1 rounded-full bg-amber-500 py-2.5 font-pixel text-sm text-white transition hover:brightness-105"
-                >
-                  预购
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 支付小票弹窗 */}
-      {showPaymentReceipt && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-card p-6 shadow-2xl animate-bubble-in">
-            <h3 className="mb-4 text-center font-pixel text-lg text-foreground">支付小票</h3>
-            
-            <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-4">
-              <div className="mb-3 border-b border-dashed border-border pb-2">
-                <p className="font-pixel text-xs text-muted-foreground">商品清单</p>
-              </div>
-              
-              <div className="space-y-2">
-                {cart.map(item => (
-                  <div key={item.cartId} className="flex items-center justify-between">
-                    <span className="font-pixel text-xs text-foreground">{item.name}</span>
-                    <span className="font-pixel text-xs text-muted-foreground">🥫 {item.price} × {item.quantity}</span>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="mt-3 border-t border-dashed border-border pt-2 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-pixel text-xs text-muted-foreground">合计</span>
-                  <span className="font-pixel text-sm text-amber-600">🥫 {cartTotal}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-pixel text-xs text-muted-foreground">当前余额</span>
-                  <span className="font-pixel text-xs text-foreground">🥫 {coins}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-pixel text-xs text-muted-foreground">购买后余额</span>
-                  <span className={`font-pixel text-xs ${coins - cartTotal < 0 ? 'text-red-500' : 'text-foreground'}`}>🥫 {coins - cartTotal}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => setShowPaymentReceipt(false)}
                 disabled={isBuying}
                 className="flex-1 rounded-full bg-secondary py-2.5 font-pixel text-sm text-secondary-foreground transition hover:bg-secondary/80 disabled:opacity-50"
               >
                 取消
               </button>
               <button
-                onClick={confirmCheckout}
-                disabled={isBuying || !canAffordCart}
+                onClick={confirmReceipt}
+                disabled={isBuying || (pendingTotal > 0 && coins < pendingTotal)}
                 className="flex-1 rounded-full bg-amber-500 py-2.5 font-pixel text-sm text-white transition hover:brightness-105 disabled:opacity-50"
               >
-                {isBuying ? '支付中...' : '确认支付'}
+                {isBuying ? '支付中...' : pendingTotal > 0 ? '确认支付' : '确认保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 未保存提示弹窗 */}
+      {showUnsavedDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border-2 border-border bg-card p-6 shadow-2xl animate-bubble-in">
+            <h3 className="mb-2 text-center font-pixel text-lg text-foreground">有未保存的更改</h3>
+            <p className="mb-5 text-center text-sm text-muted-foreground">
+              当前布置还未保存，确定要退出吗？
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleDiscardAndClose}
+                className="flex-1 rounded-full bg-secondary py-2.5 font-pixel text-sm text-secondary-foreground transition hover:bg-secondary/80"
+              >
+                退出
+              </button>
+              <button
+                onClick={handleSaveAndClose}
+                className="flex-1 rounded-full bg-primary py-2.5 font-pixel text-sm text-primary-foreground transition hover:brightness-105"
+              >
+                保存
               </button>
             </div>
           </div>
