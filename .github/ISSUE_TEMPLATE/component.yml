@@ -1,0 +1,62 @@
+name: ⚛️ Feature — Component
+about: 新增 UI 组件或功能
+title: "[Component] "
+labels: ["enhancement", "ui"]
+
+body:
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 组件范围
+      options:
+        - Room (Cozy Room 陪伴空间)
+        - Game (Shopify 商店街)
+        - Shared (跨组件通用)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 功能描述
+      placeholder: 这个组件做什么？用户如何交互？
+    validations:
+      required: true
+
+  - type: textarea
+    id: api
+    attributes:
+      label: API 依赖
+      description: 需要调用哪个后端接口？
+      placeholder: |
+        - GET /api/companion/xxx
+        - POST /api/companion/xxx
+        - 无（纯前端组件）
+
+  - type: textarea
+    id: props
+    attributes:
+      label: Props 设计
+      description: 预计的 Props 接口
+      placeholder: |
+        interface Props {
+          characterId: string;
+          // ...
+        }
+
+  - type: textarea
+    id: mock
+    attributes:
+      label: Mock 数据
+      description: 开发时用的测试数据
+      placeholder: 提供示例数据结构
+
+  - type: checkboxes
+    id: check
+    attributes:
+      label: 确认
+      options:
+        - label: 已搜索现有 Issue，无重复
+          required: true
+        - label: 已阅读 CONTRIBUTING.md 中的组件规范
+          required: true
