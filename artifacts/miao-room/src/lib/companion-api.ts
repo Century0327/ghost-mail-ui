@@ -4,7 +4,7 @@
 import companionLocal from './companion-local'
 import type { Letter, Conversation, Attachment } from './companion-local'
 
-const API_BASE = '' // 使用相对路径，由 vercel.json rewrite 代理到后端
+const API_BASE = 'https://random-ai-mail-ghost.vercel.app' // 后端部署地址
 
 function getDeviceId(): string {
   if (typeof window === 'undefined') return 'server'

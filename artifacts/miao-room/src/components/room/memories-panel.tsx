@@ -330,30 +330,31 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie' }: { open:
                 </span>
                 {active.category === 'favorite' ? '已珍藏' : '珍藏'}
               </button>
-              {active.images.length > 0 && (() => {
-                const inAlbum = isImageInAlbum(active.images[activeImageIndex])
-                return (
-                  <button
-                    onClick={() => saveImageToAlbum(active.images[activeImageIndex])}
-                    className={`flex items-center gap-1.5 rounded-full px-4 py-2 font-cute text-sm transition-all ${
-                      inAlbum
-                        ? 'bg-primary/15 text-primary'
-                        : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
-                    } ${albumAnimating ? 'scale-105' : ''}`}
-                  >
-                    <span className="relative flex size-4 items-center justify-center">
-                      <Image
-                        className={`size-4 transition-all ${albumAnimating ? 'scale-125' : ''}`}
-                        fill={inAlbum ? 'currentColor' : 'none'}
-                      />
-                      {albumAnimating && (
-                        <Image className="size-4 absolute animate-ping opacity-50" />
-                      )}
-                    </span>
-                    {inAlbum ? '已存入' : '存入相册'}
-                  </button>
-                )
-              })()}
+              {active.images.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">存入相册:</span>
+                  {active.images.map((img, idx) => {
+                    const inAlbum = isImageInAlbum(img)
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => saveImageToAlbum(img)}
+                        className={`relative flex size-8 items-center justify-center rounded-full transition-all ${
+                          inAlbum
+                            ? 'bg-primary/15 text-primary'
+                            : 'bg-secondary/50 text-secondary-foreground hover:bg-secondary'
+                        }`}
+                        title={inAlbum ? '已存入' : '存入相册'}
+                      >
+                        <Image
+                          className={`size-4 transition-all`}
+                          fill={inAlbum ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -272,10 +272,11 @@ export function CozyRoom() {
     setCatAnim('walk')
     setCatPos({ x, y })
     
+    // 使用 setTimeout 检测动画结束，但稍微提前一点以避免闪烁
     setTimeout(() => {
       setIsMoving(false)
       setCatAnim('idle')
-    }, duration * 1000)
+    }, duration * 1000 - 50)
   }, [catFacing])
 
   // 点击房间背景 → 移动猫 + 波纹效果
@@ -602,8 +603,8 @@ export function CozyRoom() {
             src={currentCharacter.image}
             alt={currentCharacter.name}
             style={{
-              width: `${30 + (catPos.y - 60) * 0.5}%`,
-              minWidth: `${100 + (catPos.y - 60) * 1.5}px`,
+              width: `${30 + (catPos.y - 60) * 0.25}%`,
+              minWidth: `${100 + (catPos.y - 60) * 0.75}px`,
               maxWidth: '200px',
               transform: `scaleX(${catFacing === 'left' ? -1 : 1})`,
               transition: 'transform 0.15s ease, width 0.3s ease, min-width 0.3s ease',
@@ -612,7 +613,7 @@ export function CozyRoom() {
             className={`pixelated drop-shadow-[0_10px_14px_rgba(90,60,40,0.3)] ${
               catAnim === 'jump' ? 'animate-cat-jump' :
               isDragging ? 'scale-105' :
-              isMoving ? 'animate-bounce' : 'animate-breathe'
+              isMoving ? 'animate-cat-walk' : 'animate-breathe'
             }`}
             draggable={false}
           />

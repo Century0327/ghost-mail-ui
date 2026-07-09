@@ -268,6 +268,14 @@
     100% { transform: scaleX(var(--cat-sx, 1)) translateY(0); }
   }
 
+  .animate-cat-walk {
+    animation: cat-walk 0.4s ease-in-out infinite;
+  }
+  @keyframes cat-walk {
+    0%, 100% { transform: scaleX(var(--cat-sx, 1)) translateY(0); }
+    50% { transform: scaleX(var(--cat-sx, 1)) translateY(-4%); }
+  }
+
   .animate-ripple {
     animation: ripple 0.6s ease-out forwards;
   }
