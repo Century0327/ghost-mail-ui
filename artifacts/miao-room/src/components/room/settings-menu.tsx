@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Music, Bell, Moon, Info, LogOut, User, Phone, Mail, MessageCircle, Globe, Code, TriangleAlert as AlertTriangle, Check, X } from 'lucide-react'
+import { companionLocal } from '@/lib/companion-local'
 
 type Toggle = { key: string; label: string; icon: typeof Music; on: boolean }
 
@@ -118,10 +119,10 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
 
   useEffect(() => {
     if (!open) {
-      // 关闭时只重置登录方法选择步骤，不影响游客/登录状态
       setLoginStep('menu')
       return
     }
+    setIsGuest(companionLocal.isGuestMode())
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
@@ -133,12 +134,14 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
     setUserInfo({ name: '喵星人' })
     setIsLoggedIn(true)
     setIsGuest(false)
+    companionLocal.setGuestMode(false)
     setLoginStep('menu')
   }
 
   const handleLogout = () => {
     setIsLoggedIn(false)
     setIsGuest(false)
+    companionLocal.setGuestMode(false)
     setUserInfo(null)
   }
 
@@ -146,6 +149,7 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
   const handleSkipConfirm = () => {
     setShowSkipAlert(false)
     setIsGuest(true)
+    companionLocal.setGuestMode(true)
     setLoginStep('menu')
     onClose()
   }

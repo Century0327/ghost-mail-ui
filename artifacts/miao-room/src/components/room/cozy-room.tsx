@@ -180,8 +180,23 @@ export function CozyRoom() {
 
   // 初始加载房间家具（只查 status 为 in_room 的）
   useEffect(() => {
-    const roomItems = companionLocal.getRoomFurniture()
-    setRoomFurniture(roomItems)
+    const init = async () => {
+      try {
+        const result = await companionApi.getFurniture()
+        if (result.furniture && result.furniture.length > 0) {
+          const inRoom = result.furniture.filter((f: any) => f.status === 'in_room')
+          setRoomFurniture(inRoom)
+          companionLocal.saveFurniture(result.furniture)
+        } else {
+          const roomItems = companionLocal.getRoomFurniture()
+          setRoomFurniture(roomItems)
+        }
+      } catch {
+        const roomItems = companionLocal.getRoomFurniture()
+        setRoomFurniture(roomItems)
+      }
+    }
+    init()
   }, [])
 
   // 代币唯一真实来源：后端数据库。本地不再作为 coins 来源。

@@ -143,16 +143,21 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
   }, [])
 
   // 保存当前状态（仅显示/隐藏，不涉及代币）
-  const saveLayoutOnly = useCallback(() => {
+  const saveLayoutOnly = useCallback(async () => {
     companionLocal.saveFurniture(furniture)
     furnitureSnapshotRef.current = JSON.parse(JSON.stringify(furniture))
     pendingSnapshotRef.current = new Set(pendingShopItemIds)
+    try {
+      await companionApi.saveFurniture(furniture)
+    } catch (err) {
+      console.warn('[ShopPanel] 保存家具到后端失败:', err)
+    }
   }, [furniture, pendingShopItemIds])
 
   // 执行购买
   const doPurchase = useCallback(async () => {
     if (pendingTotal === 0) {
-      saveLayoutOnly()
+      await saveLayoutOnly()
       return true
     }
 
@@ -165,7 +170,6 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
       }))
       const result = await companionApi.buyItems(items)
       if (result.status === 'ok') {
-        // 新购买的物品
         const newItems: PlayerFurniture[] = Array.from(pendingShopItemIds).map((id, idx) => ({
           uniqueId: `${id}_${Date.now()}_${idx}`,
           templateId: id,
@@ -177,18 +181,20 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
         const newFur = [...furniture, ...newItems]
         setFurniture(newFur)
 
-        // 更新本地存储
         companionLocal.saveFurniture(newFur)
 
-        // 更新代币
+        try {
+          await companionApi.saveFurniture(newFur)
+        } catch (err) {
+          console.warn('[ShopPanel] 保存家具到后端失败:', err)
+        }
+
         const newCoins = result.coins ?? (coins - pendingTotal)
         companionLocal.setCoins(newCoins)
         onCoinsChange?.(newCoins)
 
-        // 清空待购买
         setPendingShopItemIds(new Set())
 
-        // 更新快照
         furnitureSnapshotRef.current = JSON.parse(JSON.stringify(newFur))
         pendingSnapshotRef.current = new Set()
 

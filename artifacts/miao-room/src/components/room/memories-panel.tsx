@@ -183,30 +183,35 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie', onImageSa
   }
 
   const saveImageToAlbum = async (imgSrc: string) => {
-    if (savingToAlbum || isImageInAlbum(imgSrc)) return
+    if (savingToAlbum) return
+    const isIn = isImageInAlbum(imgSrc)
     setSavingToAlbum(true)
     setAlbumAnimating(true)
     try {
-      await companionApi.createAttachment({
-        character_id: characterId,
-        src: imgSrc,
-        title: active?.title || '美好瞬间',
-        letter_id: active?.id,
-      })
-    } catch (err) {
-      console.error('存入相册失败:', err)
-      // 后端失败时，至少保存到本地，避免用户完全无法使用
-      companionLocal.addAttachment({
-        characterId,
-        letterId: active?.id,
-        src: imgSrc,
-        title: active?.title || '美好瞬间',
-        createdAt: new Date().toISOString(),
-      })
+      if (isIn) {
+        companionLocal.deleteAttachment(imgSrc)
+      } else {
+        try {
+          await companionApi.createAttachment({
+            character_id: characterId,
+            src: imgSrc,
+            title: active?.title || '美好瞬间',
+            letter_id: active?.id,
+          })
+        } catch (err) {
+          console.error('存入相册失败:', err)
+          companionLocal.addAttachment({
+            characterId,
+            letterId: active?.id,
+            src: imgSrc,
+            title: active?.title || '美好瞬间',
+            createdAt: new Date().toISOString(),
+          })
+        }
+      }
     } finally {
       setSavingToAlbum(false)
       setTimeout(() => setAlbumAnimating(false), 600)
-      // 通知父组件相册有新内容，需要刷新
       onImageSaved?.()
     }
   }
@@ -320,10 +325,10 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie', onImageSa
                         return (
                           <button
                             onClick={() => saveImageToAlbum(currentImg)}
-                            disabled={inAlbum || savingToAlbum}
+                            disabled={savingToAlbum}
                             className={`flex h-11 items-center gap-2 rounded-full px-5 font-cute text-base transition-all active:scale-95 ${
                               inAlbum
-                                ? 'bg-primary/15 text-primary cursor-default'
+                                ? 'bg-primary/15 text-primary hover:bg-primary/25'
                                 : 'bg-primary text-primary-foreground shadow-md hover:brightness-110'
                             } ${albumAnimating ? 'scale-105' : ''}`}
                           >
@@ -336,7 +341,7 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie', onImageSa
                                 <Image className="size-5 absolute animate-ping opacity-50" />
                               )}
                             </span>
-                            <span>{inAlbum ? '已存入相册' : savingToAlbum ? '保存中...' : '存入相册'}</span>
+                            <span>{inAlbum ? '从相册移除' : savingToAlbum ? '保存中...' : '存入相册'}</span>
                           </button>
                         )
                       })()}

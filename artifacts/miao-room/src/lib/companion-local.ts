@@ -12,6 +12,7 @@ export interface CompanionState {
   letters: Letter[]
   conversations: Conversation[]
   attachments: Attachment[]
+  isGuest?: boolean // 是否为游客模式（跳过登录）
   lastSync?: number
 }
 
@@ -586,6 +587,18 @@ export const companionLocal = {
     state.coins = Math.max(0, state.coins + amount)
     this.saveState(state)
     return state.coins
+  },
+
+  // ==================== 游客模式 ====================
+
+  isGuestMode(): boolean {
+    return this.getState().isGuest === true
+  },
+
+  setGuestMode(value: boolean): void {
+    const state = this.getState()
+    state.isGuest = value
+    this.saveState(state)
   },
 
   // ==================== 重置 ====================

@@ -9,8 +9,11 @@ const API_BASE = '' // 使用相对路径，走 Vercel rewrite 代理，避免 C
 export function resolveAssetUrl(url: string | undefined | null): string | undefined {
   if (!url) return undefined
   if (url.startsWith('http://') || url.startsWith('https://')) return url
-  if (url.startsWith('/')) return `https://random-ai-mail-ghost.vercel.app${url}`
-  return `https://random-ai-mail-ghost.vercel.app/${url}`
+  if (url.startsWith('data:')) return url
+  if (url.startsWith('blob:')) return url
+  if (url.startsWith('/api/')) return `${window.location.origin}${url}`
+  if (url.startsWith('/')) return url
+  return `/${url}`
 }
 
 function getDeviceId(): string {
@@ -102,7 +105,7 @@ export const companionApi = {
     })
   },
 
-  getUserItems: () => Promise.resolve({ items: companionLocal.getItems() }),
+  getUserItems: () => Promise.resolve({ items: companionLocal.getPlayerFurniture() }),
 
   // ========== 信件（后端 API + 本地缓存） ==========
 
@@ -271,6 +274,49 @@ export const companionApi = {
         total_spent: 0,
         items_added: [],
       }
+    }
+  },
+
+  // ========== 家具布置（后端持久化 + 本地兜底） ==========
+
+  getFurniture: async (): Promise<{ furniture: any[] }> => {
+    try {
+      const result = await apiFetch('/api/companion/user/furniture')
+      return { furniture: result.furniture || [] }
+    } catch (err) {
+      console.warn('[getFurniture] 从后端获取失败，使用本地数据:', err)
+      return { furniture: companionLocal.getPlayerFurniture() }
+    }
+  },
+
+  saveFurniture: async (furniture: any[]): Promise<{ ok: boolean; count?: number }> => {
+    try {
+      const result = await apiFetch('/api/companion/user/furniture', {
+        method: 'PUT',
+        body: JSON.stringify({ furniture }),
+      })
+      return { ok: !!result.ok, count: result.count }
+    } catch (err) {
+      console.warn('[saveFurniture] 保存到后端失败，仅保存本地:', err)
+      companionLocal.saveFurniture(furniture)
+      return { ok: true, count: furniture.length }
+    }
+  },
+
+  // ========== 用户代币（后端为唯一真实来源） ==========
+
+  getCoins: async (): Promise<{ coins: number }> => {
+    try {
+      const result = await apiFetch('/api/auth/profile')
+      const coins = result?.user?.coins
+      if (typeof coins === 'number') {
+        companionLocal.setCoins(coins)
+        return { coins }
+      }
+      return { coins: companionLocal.getCoins() }
+    } catch (err) {
+      console.warn('[getCoins] 从后端获取代币失败，使用本地:', err)
+      return { coins: companionLocal.getCoins() }
     }
   },
 
