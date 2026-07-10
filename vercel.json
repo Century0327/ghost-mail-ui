@@ -1,7 +1,8 @@
 {
   "buildCommand": "pnpm --filter @workspace/miao-room run build",
   "outputDirectory": "artifacts/miao-room/dist/public",
-  "installCommand": "pnpm install",
+  "installCommand": "npm install -g pnpm@9.15.3 && pnpm install",
+  "framework": null,
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://random-ai-mail-ghost.vercel.app/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
