@@ -6,13 +6,11 @@ import { companionApi } from '@/lib/companion-api'
 
 type Tab = 'warehouse' | 'shop'
 
-// 商品模板字典
-const GLOBAL_SHOP_ITEMS: Record<string, ShopItem> = {}
-SHOP_ITEMS.forEach(item => { GLOBAL_SHOP_ITEMS[item.id] = item })
-// 补充默认物品
-GLOBAL_SHOP_ITEMS['cat_bed'] = { id: 'cat_bed', name: '猫窝', desc: '温暖舒适的猫窝', price: 0, emojiColor: '#e8a87c', image: '/room/item-catbed.png' }
-GLOBAL_SHOP_ITEMS['carpet'] = { id: 'carpet', name: '地毯', desc: '柔软的小地毯', price: 0, emojiColor: '#c9b79c', image: '/room/item-carpet.png' }
-GLOBAL_SHOP_ITEMS['lamp'] = { id: 'lamp', name: '台灯', desc: '温馨的小台灯', price: 0, emojiColor: '#e0b04a', image: '/room/item-lamp.png' }
+const DEFAULT_SHOP_ITEMS: Record<string, ShopItem> = {}
+SHOP_ITEMS.forEach(item => { DEFAULT_SHOP_ITEMS[item.id] = item })
+DEFAULT_SHOP_ITEMS['cat_bed'] = { id: 'cat_bed', name: '猫窝', desc: '温暖舒适的猫窝', price: 0, emojiColor: '#e8a87c', image: '/room/item-catbed.png' }
+DEFAULT_SHOP_ITEMS['carpet'] = { id: 'carpet', name: '地毯', desc: '柔软的小地毯', price: 0, emojiColor: '#c9b79c', image: '/room/item-carpet.png' }
+DEFAULT_SHOP_ITEMS['lamp'] = { id: 'lamp', name: '台灯', desc: '温馨的小台灯', price: 0, emojiColor: '#e0b04a', image: '/room/item-lamp.png' }
 
 function ItemIcon({
   item,
@@ -56,17 +54,44 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
   const [currentTab, setCurrentTab] = useState<Tab>('warehouse')
   const [furniture, setFurniture] = useState<PlayerFurniture[]>([])
   const [pendingShopItemIds, setPendingShopItemIds] = useState<Set<string>>(new Set())
+  const [isBuying, setIsBuying] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
-  const [isBuying, setIsBuying] = useState(false)
+  const [shopItems, setShopItems] = useState<ShopItem[]>([])
+  const [shopItemsMap, setShopItemsMap] = useState<Record<string, ShopItem>>(DEFAULT_SHOP_ITEMS)
 
   const furnitureSnapshotRef = useRef<PlayerFurniture[]>([])
   const pendingSnapshotRef = useRef<Set<string>>(new Set())
   const closeTargetRef = useRef<'save' | 'discard' | null>(null)
 
-  // 打开时加载数据并保存快照
   useEffect(() => {
     if (!open) return
+    const fetchShopItems = async () => {
+      try {
+        const result = await companionApi.getItems()
+        if (result.items?.length) {
+          const items: ShopItem[] = result.items.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            desc: item.desc || item.description || '',
+            price: item.price,
+            emojiColor: item.emojiColor || item.emoji_color || '#ccc',
+            image: item.image,
+          }))
+          setShopItems(items)
+          const map: Record<string, ShopItem> = { ...DEFAULT_SHOP_ITEMS }
+          items.forEach(item => { map[item.id] = item })
+          setShopItemsMap(map)
+        } else {
+          setShopItems(SHOP_ITEMS)
+          setShopItemsMap(DEFAULT_SHOP_ITEMS)
+        }
+      } catch {
+        setShopItems(SHOP_ITEMS)
+        setShopItemsMap(DEFAULT_SHOP_ITEMS)
+      }
+    }
+    fetchShopItems()
     const allFurniture = companionLocal.getPlayerFurniture()
     setFurniture(allFurniture)
     setPendingShopItemIds(new Set())
@@ -96,7 +121,7 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
 
   // 计算待花费代币
   const pendingTotal = Array.from(pendingShopItemIds).reduce((sum, id) => {
-    const item = GLOBAL_SHOP_ITEMS[id]
+    const item = shopItemsMap[id]
     return sum + (item?.price || 0)
   }, 0)
 
@@ -166,7 +191,7 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
       const items = Array.from(pendingShopItemIds).map(id => ({
         item_id: id,
         quantity: 1,
-        price: GLOBAL_SHOP_ITEMS[id]?.price || 0,
+        price: shopItemsMap[id]?.price || 0,
       }))
       const result = await companionApi.buyItems(items)
       if (result.status === 'ok') {
@@ -339,7 +364,7 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
                 ) : (
                   <div className="grid grid-cols-4 gap-3 pb-2 sm:grid-cols-6">
                     {furniture.map((f) => {
-                    const tpl = GLOBAL_SHOP_ITEMS[f.templateId] || { name: f.templateId, emojiColor: '#ccc', price: 0 }
+                    const tpl = shopItemsMap[f.templateId] || { name: f.templateId, emojiColor: '#ccc', price: 0 }
                     const isShowing = f.status === 'in_room'
                     return (
                       <div
@@ -391,7 +416,7 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
                 )
               ) : (
                 <div className="grid grid-cols-4 gap-3 pb-2 sm:grid-cols-6">
-                  {SHOP_ITEMS.map((item) => {
+                  {shopItems.map((item) => {
                     const isPending = pendingShopItemIds.has(item.id)
                     const canAfford = coins >= item.price
                     return (
@@ -479,7 +504,7 @@ export function ShopPanel({ open, onClose, onFurnitureChange, coins = 100, onCoi
               {pendingTotal > 0 ? (
                 <div className="space-y-2">
                   {Array.from(pendingShopItemIds).map(id => {
-                  const item = GLOBAL_SHOP_ITEMS[id]
+                  const item = shopItemsMap[id]
                   return (
                     <div key={id} className="flex items-center justify-between">
                       <span className="font-pixel text-xs text-foreground">{item?.name || id}</span>
