@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# 构建时自动生成的版本号文件（不提交，避免冲突）
+artifacts/miao-room/src/version.ts
