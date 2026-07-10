@@ -140,7 +140,7 @@ importers:
         version: 3.22.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react@19.1.0)
       ai:
         specifier: ^7.0.15
-        version: 7.0.19(zod@3.25.76)
+        version: 7.0.20(zod@3.25.76)
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
@@ -363,7 +363,7 @@ importers:
         version: 19.1.11(@types/react@19.1.17)
       '@ungap/structured-clone':
         specifier: ^1.3.0
-        version: 1.3.2
+        version: 1.3.3
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
@@ -3425,8 +3425,8 @@ packages:
   '@types/yargs@17.0.35':
     resolution: {integrity: sha512-qUHkeCyQFxMXg79wQfTtfndEC+N9ZZg76HJftDJp+qH2tV7Gj4OJi7l+PiWwJ+pWtW8GwSmqsDj/oymhrTWXjg==}
 
-  '@ungap/structured-clone@1.3.2':
-    resolution: {integrity: sha512-5jsZFwgR5rTdKwidH9Qmat75RKwqfpKlWWB1frDkljN127mwqBu8K0PYo7/hFpF03IEJpfVPpCQDY/eDx3iHvA==}
+  '@ungap/structured-clone@1.3.3':
+    resolution: {integrity: sha512-60YRaenCQcVjYEKOcG824+DRGGIQ3VKErcBoAEDJZz5bKIs2ZG+X/H9Nk+Q6EVkwJk5QNApxbrc5QtBSwtrXAg==}
 
   '@urql/core@5.2.0':
     resolution: {integrity: sha512-/n0ieD0mvvDnVAXEQgX/7qJiVcvYvNkOHeBvkwtylfjydar123caCXcl58PXFY11oU1oquJocVXHxLAbtv4x1A==}
@@ -3476,8 +3476,8 @@ packages:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
 
-  ai@7.0.19:
-    resolution: {integrity: sha512-7kxMNiy6JqCvruCY2qGMNzeqEt9Ey3XqrtYGHWyipDJTXHFN7gOyO1UR2UIXhw112vAUkrO+OJJzemKJD8P3bA==}
+  ai@7.0.20:
+    resolution: {integrity: sha512-Wvg55nPFnlstfzNGIoxP1zzYQRLl3OQsyIGnKMFQaaXZhivd8Lc9jWeUJ7u5Y7VmdYsLm/OlkiILEyq9ItBjoQ==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9884,7 +9884,7 @@ snapshots:
     dependencies:
       '@types/yargs-parser': 21.0.3
 
-  '@ungap/structured-clone@1.3.2': {}
+  '@ungap/structured-clone@1.3.3': {}
 
   '@urql/core@5.2.0':
     dependencies:
@@ -9938,7 +9938,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  ai@7.0.19(zod@3.25.76):
+  ai@7.0.20(zod@3.25.76):
     dependencies:
       '@ai-sdk/gateway': 4.0.15(zod@3.25.76)
       '@ai-sdk/provider': 4.0.3
@@ -10991,7 +10991,7 @@ snapshots:
       '@expo/metro': 54.2.0
       '@expo/metro-config': 54.0.16(expo@54.0.35)
       '@expo/vector-icons': 15.1.1(expo-font@14.0.12(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
-      '@ungap/structured-clone': 1.3.2
+      '@ungap/structured-clone': 1.3.3
       babel-preset-expo: 54.0.11(@babel/core@7.29.7)(@babel/runtime@7.29.7)(expo@54.0.35)(react-refresh@0.14.2)
       expo-asset: 12.0.13(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
       expo-constants: 18.0.13(expo@54.0.35)(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.1.0))
