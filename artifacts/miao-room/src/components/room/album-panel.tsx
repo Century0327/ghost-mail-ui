@@ -41,7 +41,7 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie', refreshTrigg
       const result = await companionApi.getAttachments(characterId)
       const mapped = (result.attachments || []).map((a: any) => ({
         id: a.id || a.src,
-        src: resolveAssetUrl(a.src || a.attachment_url || '') || '',
+        src: a.src || resolveAssetUrl(a.attachment_url || '') || '',
         title: a.title || '美好瞬间',
         date: a.createdAt
           ? new Date(a.createdAt).toLocaleDateString('zh-CN')
@@ -73,8 +73,12 @@ export function AlbumPanel({ open, onClose, characterId = 'maodie', refreshTrigg
   const handleDelete = async (img: AlbumImage, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!confirm('确定要删除这张图片吗？')) return
-    // 本地删除（后端暂无删除接口，先保证 UI 可用）
-    companionLocal.deleteAttachment?.(img.id)
+    try {
+      await companionApi.deleteAttachment(img.id)
+    } catch (err) {
+      console.error('删除附件失败:', err)
+      companionLocal.deleteAttachment?.(img.id)
+    }
     setImages(prev => prev.filter(i => i.id !== img.id))
     if (selectedImage?.id === img.id) {
       setSelectedImage(null)

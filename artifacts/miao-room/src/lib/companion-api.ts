@@ -244,6 +244,20 @@ export const companionApi = {
     }
   },
 
+  deleteAttachment: async (id: string): Promise<{ status: string }> => {
+    try {
+      const result = await apiFetch('/api/companion/attachments', {
+        method: 'DELETE',
+        body: JSON.stringify({ id }),
+      })
+      companionLocal.deleteAttachment(id)
+      return result
+    } catch {
+      companionLocal.deleteAttachment(id)
+      return { status: 'ok' }
+    }
+  },
+
   createAttachment: async (data: {
     character_id: string
     src: string
