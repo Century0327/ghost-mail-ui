@@ -192,12 +192,21 @@ export function MemoriesPanel({ open, onClose, characterId = 'maodie', onImageSa
         companionLocal.deleteAttachment(imgSrc)
       } else {
         try {
-          await companionApi.createAttachment({
+          const result = await companionApi.uploadAttachment({
             character_id: characterId,
-            src: imgSrc,
+            imageSrc: imgSrc,
             title: active?.title || '美好瞬间',
             letter_id: active?.id,
           })
+          if (result.status === 'fallback') {
+            companionLocal.addAttachment({
+              characterId,
+              letterId: active?.id,
+              src: imgSrc,
+              title: active?.title || '美好瞬间',
+              createdAt: new Date().toISOString(),
+            })
+          }
         } catch (err) {
           console.error('存入相册失败:', err)
           companionLocal.addAttachment({

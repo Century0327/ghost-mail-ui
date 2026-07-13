@@ -16,6 +16,32 @@ export function resolveAssetUrl(url: string | undefined | null): string | undefi
   return `/${url}`
 }
 
+function imageToBase64(imgSrc: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('无法创建 canvas context'))
+        return
+      }
+      ctx.drawImage(img, 0, 0)
+      try {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        resolve(dataUrl)
+      } catch (e) {
+        reject(e)
+      }
+    }
+    img.onerror = () => reject(new Error('图片加载失败，无法转 base64'))
+    img.src = imgSrc
+  })
+}
+
 function getDeviceId(): string {
   if (typeof window === 'undefined') return 'server'
   let id = localStorage.getItem('ghost_device_id')
@@ -233,6 +259,44 @@ export const companionApi = {
         letterId: data.letter_id,
         characterId: data.character_id,
         src: data.src,
+        title: data.title || '',
+        createdAt: new Date().toISOString(),
+      })
+    }
+    return result
+  },
+
+  uploadAttachment: async (data: {
+    character_id: string
+    imageSrc: string
+    title?: string
+    letter_id?: string
+  }): Promise<{ status: string; attachment?: Attachment }> => {
+    let base64 = ''
+    try {
+      base64 = await imageToBase64(data.imageSrc)
+    } catch (e) {
+      console.warn('[uploadAttachment] 图片转 base64 失败，回退到直接存 src:', e)
+      return { status: 'fallback', attachment: undefined }
+    }
+
+    const result = await apiFetch('/api/companion/attachments/upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        image: base64,
+        character_id: data.character_id,
+        title: data.title,
+        letter_id: data.letter_id,
+      }),
+    })
+
+    if (result.attachment) {
+      const resolvedSrc = resolveAssetUrl(result.attachment.src) || result.attachment.src
+      companionLocal.addAttachment({
+        id: result.attachment.id,
+        letterId: data.letter_id,
+        characterId: data.character_id,
+        src: resolvedSrc,
         title: data.title || '',
         createdAt: new Date().toISOString(),
       })
